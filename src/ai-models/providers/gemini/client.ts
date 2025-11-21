@@ -73,7 +73,8 @@ export class GeminiAPIClient {
     this.defaultMaxOutputTokens = config.maxOutputTokens || 8192
     this.defaultTemperature = config.temperature ?? 1.0
     this.timeout = config.timeout || 60000 // 60 seconds
-    this.fetchFn = config.fetch || fetch
+    // Bind fetch to preserve 'this' context in Cloudflare Workers
+    this.fetchFn = config.fetch || ((...args) => fetch(...args))
   }
 
   /**
