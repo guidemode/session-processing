@@ -8,7 +8,7 @@ import type {
 export interface BaseQuestionConfig {
   id: string
   text: string
-  type: 'likert-5' | 'likert-7' | 'nps' | 'text' | 'choice'
+  type: 'likert-5' | 'likert-7' | 'nps' | 'text' | 'choice' | 'number' | 'boolean'
   required: boolean
   labels?: [string, string]
   choices?: string[]
@@ -18,6 +18,8 @@ export interface BaseQuestionConfig {
   skipLabel?: string
   version?: string[]
   importance?: 'low' | 'medium' | 'high'
+  min?: number // For number type
+  max?: number // For number type
 }
 
 export interface AssessmentModalProps {

@@ -100,6 +100,22 @@ export function QuestionCard({ question, value, onChange, onNext, autoFocus }: Q
     }
   }
 
+  const handleNumberChange = (numValue: number) => {
+    onChange({ type: 'number', value: numValue })
+  }
+
+  const handleBooleanChange = (boolValue: boolean) => {
+    // Check if this is actually a change
+    const isChanging = !value || value.type !== 'boolean' || value.value !== boolValue
+
+    onChange({ type: 'boolean', value: boolValue })
+
+    // Only auto-advance if we're actually changing the answer
+    if (isChanging && onNext) {
+      setTimeout(onNext, 300)
+    }
+  }
+
   const renderInput = () => {
     switch (question.type) {
       case 'likert-5':
@@ -148,6 +164,45 @@ export function QuestionCard({ question, value, onChange, onNext, autoFocus }: Q
             value={value?.type === 'choice' ? value.value : undefined}
             onChange={handleChoiceChange}
           />
+        )
+      case 'number':
+        return (
+          <div className="flex flex-col items-center gap-4">
+            <input
+              type="number"
+              className="input input-bordered input-lg w-32 text-center text-2xl"
+              value={value?.type === 'number' ? value.value : ''}
+              onChange={(e) => {
+                const num = Number.parseFloat(e.target.value)
+                if (!Number.isNaN(num)) {
+                  handleNumberChange(num)
+                }
+              }}
+              min={question.min}
+              max={question.max}
+              placeholder="0"
+              autoFocus
+            />
+          </div>
+        )
+      case 'boolean':
+        return (
+          <div className="flex gap-4 justify-center">
+            <button
+              type="button"
+              className={`btn btn-lg ${value?.type === 'boolean' && value.value === false ? 'btn-primary' : 'btn-outline'}`}
+              onClick={() => handleBooleanChange(false)}
+            >
+              {question.labels?.[0] || 'No'}
+            </button>
+            <button
+              type="button"
+              className={`btn btn-lg ${value?.type === 'boolean' && value.value === true ? 'btn-primary' : 'btn-outline'}`}
+              onClick={() => handleBooleanChange(true)}
+            >
+              {question.labels?.[1] || 'Yes'}
+            </button>
+          </div>
         )
       default:
         return <div className="text-error">Unknown question type: {question.type}</div>
