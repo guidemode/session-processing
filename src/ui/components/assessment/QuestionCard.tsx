@@ -172,7 +172,7 @@ export function QuestionCard({ question, value, onChange, onNext, autoFocus }: Q
               type="number"
               className="input input-bordered input-lg w-32 text-center text-2xl"
               value={value?.type === 'number' ? value.value : ''}
-              onChange={(e) => {
+              onChange={e => {
                 const num = Number.parseFloat(e.target.value)
                 if (!Number.isNaN(num)) {
                   handleNumberChange(num)
@@ -181,7 +181,6 @@ export function QuestionCard({ question, value, onChange, onNext, autoFocus }: Q
               min={question.min}
               max={question.max}
               placeholder="0"
-              autoFocus
             />
           </div>
         )

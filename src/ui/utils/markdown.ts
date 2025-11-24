@@ -45,7 +45,7 @@ export async function parseMarkdown(
   const { marked } = await import('marked')
 
   // Load Prism for syntax highlighting with common languages
-  let Prism: any = null
+  let Prism: typeof import('prismjs') | null = null
   if (enableSyntaxHighlighting) {
     try {
       // Import base Prism (includes markup, css, clike, javascript)

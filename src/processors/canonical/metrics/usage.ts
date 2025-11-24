@@ -296,7 +296,7 @@ export class CanonicalUsageProcessor extends BaseMetricProcessor {
 
     // Check for image content blocks in array content
     if (typeof message.content !== 'string' && Array.isArray(message.content)) {
-      count += message.content.filter((block: any) => block.type === 'image').length
+      count += message.content.filter((block: { type?: string }) => block.type === 'image').length
     }
 
     // Check metadata for image attachments
@@ -305,7 +305,7 @@ export class CanonicalUsageProcessor extends BaseMetricProcessor {
         ? message.metadata.attachments
         : [message.metadata.attachments]
 
-      count += attachments.filter((att: any) => {
+      count += attachments.filter((att: string | { type?: string }) => {
         if (typeof att === 'string') {
           return att.toLowerCase().match(/\.(png|jpg|jpeg|gif|webp|svg)$/i)
         }

@@ -40,7 +40,13 @@ export interface TokenUsageChartProps {
 /**
  * Custom tooltip showing per-message tokens and current cache total
  */
-function CustomTooltip({ active, payload }: any) {
+function CustomTooltip({
+  active,
+  payload,
+}: {
+  active?: boolean
+  payload?: { payload: RechartsTokenData }[]
+}) {
   if (!active || !payload || payload.length === 0) {
     return null
   }
