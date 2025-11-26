@@ -146,6 +146,7 @@ export class GeminiAPIClient {
 
   /**
    * Send a prompt expecting JSON response
+   * Uses Gemini's native JSON response mode (responseMimeType) for reliable JSON output
    */
   async promptJSON<T = unknown>(
     prompt: string,
@@ -158,35 +159,57 @@ export class GeminiAPIClient {
   ): Promise<{ data: T; usage: { input_tokens: number; output_tokens: number } }> {
     // Add JSON formatting instruction to system prompt
     const systemPrompt = options?.systemInstruction
-      ? `${options.systemInstruction}\n\nIMPORTANT: Respond with valid JSON only. Do not include markdown code blocks or any other text.`
-      : 'Respond with valid JSON only. Do not include markdown code blocks or any other text.'
+      ? `${options.systemInstruction}\n\nIMPORTANT: You MUST respond with valid JSON only. Do not include any text, explanation, or markdown before or after the JSON. Start your response with { and end with }.`
+      : 'You MUST respond with valid JSON only. Do not include any text, explanation, or markdown before or after the JSON. Start your response with { and end with }.'
 
-    const result = await this.prompt(prompt, {
+    const messages: GeminiMessage[] = [
+      {
+        role: 'user',
+        parts: [{ text: prompt }],
+      },
+    ]
+
+    // Use generateContent with JSON MIME type for reliable JSON output
+    const response = await this.generateContent(messages, {
       ...options,
       systemInstruction: systemPrompt,
-      // Request JSON MIME type for better formatting
-      // responseMimeType: 'application/json' // Commented out as it may not work with all models
+      responseMimeType: 'application/json',
     })
 
-    // Parse JSON from response
-    let jsonText = result.text.trim()
+    // Extract text from response
+    const text = response.candidates[0]?.content.parts.map(part => part.text).join('\n') || ''
+    const usage = {
+      input_tokens: response.usageMetadata.promptTokenCount,
+      output_tokens: response.usageMetadata.candidatesTokenCount,
+    }
 
-    // Remove markdown code blocks if present
+    // Parse JSON from response
+    let jsonText = text.trim()
+
+    // Remove markdown code blocks if present (fallback)
     if (jsonText.startsWith('```json')) {
       jsonText = jsonText.replace(/^```json\s*\n/, '').replace(/\n```$/, '')
     } else if (jsonText.startsWith('```')) {
       jsonText = jsonText.replace(/^```\s*\n/, '').replace(/\n```$/, '')
     }
 
+    // If response doesn't start with {, try to extract JSON from the text
+    if (!jsonText.startsWith('{') && !jsonText.startsWith('[')) {
+      const jsonMatch = jsonText.match(/\{[\s\S]*\}/)
+      if (jsonMatch) {
+        jsonText = jsonMatch[0]
+      }
+    }
+
     try {
       const data = JSON.parse(jsonText) as T
       return {
         data,
-        usage: result.usage,
+        usage,
       }
     } catch (error) {
       throw new Error(
-        `Failed to parse JSON response: ${error instanceof Error ? error.message : 'Unknown error'}\nResponse: ${jsonText}`
+        `Failed to parse JSON response: ${error instanceof Error ? error.message : 'Unknown error'}\nResponse: ${text.substring(0, 500)}${text.length > 500 ? '...' : ''}`
       )
     }
   }
