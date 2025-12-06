@@ -28,7 +28,7 @@ interface AgentSession {
   sessionId: string
   provider: string
   username: string
-  projectName: string
+  repositoryName: string
   sessionStartTime: string | null
   sessionEndTime: string | null
   fileName?: string | null
@@ -374,7 +374,7 @@ function SessionCard({
 
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
-              <h3 className="text-sm font-medium truncate">{session.projectName}</h3>
+              <h3 className="text-sm font-medium truncate">{session.repositoryName}</h3>
               {session.gitBranch && (
                 <span className="badge badge-ghost badge-xs font-mono" title="Git branch">
                   {session.gitBranch}

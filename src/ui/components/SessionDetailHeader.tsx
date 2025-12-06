@@ -13,13 +13,13 @@ export interface SessionDetailHeaderProps {
   // Session data
   session: {
     provider: string
-    projectName: string
+    repositoryName: string
     sessionStartTime: string | null
     durationMs: number | null
     fileSize?: number
     username?: string
     userAvatarUrl?: string
-    project?: {
+    repository?: {
       name: string
       gitRemoteUrl?: string
       cwd?: string
@@ -44,7 +44,7 @@ export interface SessionDetailHeaderProps {
   onDeleteSession?: () => void
   onCwdClick?: (path: string) => void | Promise<void> // Desktop only
   onViewDiff?: () => void | Promise<void> // Desktop only - opens Session Changes tab
-  onProjectClick?: () => void | Promise<void> // Optional click handler for project name
+  onRepositoryClick?: () => void | Promise<void> // Optional click handler for repository name
 
   // Status states
   processingStatus?: 'pending' | 'processing' | 'completed' | 'failed'
@@ -80,7 +80,7 @@ export function SessionDetailHeader({
   onDeleteSession,
   onCwdClick,
   onViewDiff,
-  onProjectClick,
+  onRepositoryClick,
   processingStatus = 'pending',
   isProcessing = false,
   assessmentStatus = 'not_started',
@@ -117,11 +117,11 @@ export function SessionDetailHeader({
   }
 
   const actuallyProcessing = isProcessing || processingStatus === 'processing'
-  const workingDirectory = session.project?.cwd || session.cwd
+  const workingDirectory = session.repository?.cwd || session.cwd
 
   // Build GitHub diff URL if we have the required information
   const gitHubDiffUrl = buildGitHubDiffUrl(
-    session.project?.gitRemoteUrl,
+    session.repository?.gitRemoteUrl,
     session.firstCommitHash,
     session.latestCommitHash
   )
@@ -158,16 +158,16 @@ export function SessionDetailHeader({
                   <span className="text-base-content/50 text-sm">•</span>
                 </>
               )}
-              {onProjectClick ? (
+              {onRepositoryClick ? (
                 <button
                   type="button"
-                  onClick={onProjectClick}
+                  onClick={onRepositoryClick}
                   className="font-medium text-base md:text-lg hover:text-primary hover:underline transition-colors cursor-pointer"
                 >
-                  {session.projectName}
+                  {session.repositoryName}
                 </button>
               ) : (
-                <span className="font-medium text-base md:text-lg">{session.projectName}</span>
+                <span className="font-medium text-base md:text-lg">{session.repositoryName}</span>
               )}
               <span className="text-base-content/50 text-sm">•</span>
               <span className="text-sm text-base-content/70">
@@ -455,8 +455,8 @@ export function SessionDetailHeader({
           )}
         </div>
 
-        {/* Project, Git Info, Working Directory, and Rating */}
-        {(session.project ||
+        {/* Repository, Git Info, Working Directory, and Rating */}
+        {(session.repository ||
           workingDirectory ||
           session.gitBranch ||
           session.firstCommitHash ||
@@ -464,16 +464,16 @@ export function SessionDetailHeader({
           onRate) && (
           <div className="grid grid-cols-1 lg:grid-cols-4 gap-2">
             {/* Repository Info */}
-            {session.project?.gitRemoteUrl && (
+            {session.repository?.gitRemoteUrl && (
               <div className="stat bg-base-200 rounded-lg p-2.5">
                 <div className="flex flex-col gap-1">
                   <div className="text-xs text-base-content/60">Repository:</div>
                   <a
-                    href={session.project.gitRemoteUrl}
+                    href={session.repository.gitRemoteUrl}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="flex items-center gap-1.5 text-xs text-base-content hover:text-primary transition-colors"
-                    title={session.project.gitRemoteUrl}
+                    title={session.repository.gitRemoteUrl}
                   >
                     <svg className="w-3 h-3 flex-shrink-0" fill="currentColor" viewBox="0 0 24 24">
                       <path
@@ -483,7 +483,7 @@ export function SessionDetailHeader({
                       />
                     </svg>
                     <span className="truncate">
-                      {session.project.gitRemoteUrl.replace(/^https?:\/\/(www\.)?/, '')}
+                      {session.repository.gitRemoteUrl.replace(/^https?:\/\/(www\.)?/, '')}
                     </span>
                   </a>
                 </div>
