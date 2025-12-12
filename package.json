@@ -43,10 +43,7 @@
       "require": "./dist/cjs/validation/index.js"
     }
   },
-  "files": [
-    "dist",
-    "index.css"
-  ],
+  "files": ["dist", "index.css"],
   "scripts": {
     "build": "pnpm run clean && pnpm run build:esm && pnpm run build:cjs && pnpm run build:cjs-package",
     "build:esm": "tsc -p tsconfig.json",
@@ -134,11 +131,5 @@
     "typescript": "^5.7.2",
     "vitest": "^3.2.4"
   },
-  "keywords": [
-    "session-processing",
-    "metrics",
-    "ai",
-    "typescript",
-    "guidemode"
-  ]
+  "keywords": ["session-processing", "metrics", "ai", "typescript", "guidemode"]
 }
