@@ -5,6 +5,8 @@ export function TextResponse({
   onChange,
   placeholder,
   disabled = false,
+  onFocus,
+  onBlur,
 }: TextResponseProps) {
   return (
     <textarea
@@ -14,6 +16,8 @@ export function TextResponse({
       disabled={disabled}
       rows={4}
       className="textarea textarea-bordered w-full text-base resize-none focus:textarea-primary"
+      onFocus={onFocus}
+      onBlur={onBlur}
     />
   )
 }

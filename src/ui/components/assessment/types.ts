@@ -35,6 +35,7 @@ export interface AssessmentModalProps {
   showVersionSelector?: boolean // Default: auto-detect based on questions having 'version' property
   completionMessage?: string // Default: "Your feedback has been submitted successfully."
   previewMode?: boolean // If true, allows browsing questions without saving responses
+  onComplete?: () => void // Called after successful submission (for confetti, etc.)
 }
 
 export interface QuestionCardProps {
@@ -43,6 +44,8 @@ export interface QuestionCardProps {
   onChange: (answer: AssessmentAnswer) => void
   onNext?: () => void
   autoFocus?: boolean
+  onTextFocus?: () => void
+  onTextBlur?: () => void
 }
 
 export interface LikertScaleProps {
@@ -60,6 +63,8 @@ export interface TextResponseProps {
   onChange: (value: string) => void
   placeholder?: string
   disabled?: boolean
+  onFocus?: () => void
+  onBlur?: () => void
 }
 
 export interface ProgressBarProps {

@@ -4,7 +4,15 @@ import { LikertScale } from './LikertScale'
 import { TextResponse } from './TextResponse'
 import type { QuestionCardProps } from './types'
 
-export function QuestionCard({ question, value, onChange, onNext, autoFocus }: QuestionCardProps) {
+export function QuestionCard({
+  question,
+  value,
+  onChange,
+  onNext,
+  autoFocus,
+  onTextFocus,
+  onTextBlur,
+}: QuestionCardProps) {
   const containerRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -155,6 +163,8 @@ export function QuestionCard({ question, value, onChange, onNext, autoFocus }: Q
             value={value?.type === 'text' ? value.value : undefined}
             onChange={handleTextChange}
             placeholder={question.placeholder}
+            onFocus={onTextFocus}
+            onBlur={onTextBlur}
           />
         )
       case 'choice':

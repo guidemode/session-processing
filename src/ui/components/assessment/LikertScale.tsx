@@ -177,9 +177,9 @@ export function LikertScale({
         )}
       </div>
 
-      {/* Keyboard hint - only show for scales that support it (not NPS) */}
+      {/* Keyboard hint - only show for scales that support it (not NPS), hidden on mobile */}
       {scale <= 7 && (
-        <div className="text-center text-xs text-base-content/50">
+        <div className="hidden md:block text-center text-xs text-base-content/50">
           Press <kbd className="kbd kbd-xs">{startValue}</kbd> -{' '}
           <kbd className="kbd kbd-xs">{startValue + scale - 1}</kbd> to select
         </div>

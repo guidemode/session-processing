@@ -54,7 +54,9 @@ export function ChoiceResponse({
               </div>
               <span className="flex-1">{choice}</span>
               {keyHint && (
-                <kbd className={`kbd kbd-sm ${isSelected ? 'opacity-70' : 'opacity-50'}`}>
+                <kbd
+                  className={`hidden md:inline kbd kbd-sm ${isSelected ? 'opacity-70' : 'opacity-50'}`}
+                >
                   {keyHint}
                 </kbd>
               )}

@@ -5,11 +5,15 @@ import {
   ChevronRightIcon,
   XMarkIcon,
 } from '@heroicons/react/24/outline'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { useSwipe } from '../../hooks/useSwipe'
 import { ProgressBar } from './ProgressBar'
 import { QuestionCard } from './QuestionCard'
 import { VersionSelector } from './VersionSelector'
 import type { AssessmentModalProps } from './types'
+
+type SlideDirection = 'left' | 'right' | null
+type SlidePhase = 'idle' | 'exit' | 'enter'
 
 export function AssessmentModal({
   sessionId: _sessionId,
@@ -23,6 +27,7 @@ export function AssessmentModal({
   showVersionSelector,
   completionMessage = 'Your feedback has been submitted successfully.',
   previewMode = false,
+  onComplete,
 }: AssessmentModalProps) {
   // Auto-detect if version selector should be shown
   // Show if explicitly enabled, or if any question has a 'version' property
@@ -35,6 +40,16 @@ export function AssessmentModal({
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [startTime, setStartTime] = useState<number | null>(null)
   const [showCompletion, setShowCompletion] = useState(false)
+  const [isTextInputFocused, setIsTextInputFocused] = useState(false)
+
+  // Slide animation state
+  const [slideDirection, setSlideDirection] = useState<SlideDirection>(null)
+  const [slidePhase, setSlidePhase] = useState<SlidePhase>('idle')
+  const slidePhaseRef = useRef<SlidePhase>('idle')
+  const pendingIndex = useRef<number | null>(null)
+
+  // Keep ref in sync with state
+  slidePhaseRef.current = slidePhase
 
   // Reset start time when modal opens
   useEffect(() => {
@@ -72,11 +87,23 @@ export function AssessmentModal({
     return () => clearInterval(interval)
   }, [isOpen, responses, onDraft, previewMode])
 
-  // Keyboard navigation
+  // Trigger a slide animation to a new index
+  const triggerSlide = useCallback((direction: SlideDirection, newIndex: number) => {
+    // Use ref to get current value, avoiding stale closure
+    if (slidePhaseRef.current !== 'idle') return
+    pendingIndex.current = newIndex
+    setSlideDirection(direction)
+    setSlidePhase('exit')
+  }, [])
+
+  // Keyboard navigation - use handler that reads current state
   useEffect(() => {
     if (!isOpen) return
 
     const handleKeyPress = (e: KeyboardEvent) => {
+      // Ignore if animation is in progress (check ref for latest value)
+      if (slidePhaseRef.current !== 'idle') return
+
       // Ignore arrow keys if user is typing in a text field
       if (
         e.target instanceof HTMLTextAreaElement &&
@@ -88,19 +115,35 @@ export function AssessmentModal({
       if (e.key === 'Escape') {
         onClose()
       } else if (e.key === 'Enter' && canGoNext && !isLastQuestion) {
-        handleNext()
+        triggerSlide('left', currentIndex + 1)
       } else if (e.key === 'ArrowRight' && canGoNext && !isLastQuestion) {
         e.preventDefault()
-        handleNext()
+        triggerSlide('left', currentIndex + 1)
       } else if (e.key === 'ArrowLeft' && currentIndex > 0) {
         e.preventDefault()
-        handlePrevious()
+        triggerSlide('right', currentIndex - 1)
       }
     }
 
     window.addEventListener('keydown', handleKeyPress)
     return () => window.removeEventListener('keydown', handleKeyPress)
-  }, [isOpen, canGoNext, isLastQuestion, currentIndex, onClose])
+  }, [isOpen, onClose, triggerSlide, canGoNext, isLastQuestion, currentIndex])
+
+  // Handle the end of exit animation
+  const handleExitComplete = useCallback(() => {
+    if (pendingIndex.current !== null) {
+      setCurrentIndex(pendingIndex.current)
+      pendingIndex.current = null
+    }
+    setSlidePhase('enter')
+    // Small delay to ensure the DOM has updated with new question
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        setSlidePhase('idle')
+        setSlideDirection(null)
+      })
+    })
+  }, [])
 
   const handleAnswer = useCallback(
     (answer: AssessmentAnswer) => {
@@ -112,17 +155,44 @@ export function AssessmentModal({
     [currentQuestion]
   )
 
-  const handleNext = () => {
-    if (currentIndex < filteredQuestions.length - 1) {
-      setCurrentIndex(prev => prev + 1)
-    }
-  }
+  // Use refs for values needed by handleNext/handlePrevious to avoid stale closures
+  // when called via setTimeout from QuestionCard auto-advance
+  const currentIndexRef = useRef(currentIndex)
+  const filteredQuestionsLengthRef = useRef(filteredQuestions.length)
+  currentIndexRef.current = currentIndex
+  filteredQuestionsLengthRef.current = filteredQuestions.length
 
-  const handlePrevious = () => {
-    if (currentIndex > 0) {
-      setCurrentIndex(prev => prev - 1)
+  const handleNext = useCallback(() => {
+    // Use refs to get latest values (important for setTimeout callbacks)
+    if (
+      currentIndexRef.current < filteredQuestionsLengthRef.current - 1 &&
+      slidePhaseRef.current === 'idle'
+    ) {
+      triggerSlide('left', currentIndexRef.current + 1)
     }
-  }
+  }, [triggerSlide])
+
+  const handlePrevious = useCallback(() => {
+    if (currentIndexRef.current > 0 && slidePhaseRef.current === 'idle') {
+      triggerSlide('right', currentIndexRef.current - 1)
+    }
+  }, [triggerSlide])
+
+  // Swipe gesture handling for mobile
+  const {
+    handlers: swipeHandlers,
+    dragOffset,
+    isDragging,
+  } = useSwipe({
+    onSwipeLeft: () => {
+      if (canGoNext && !isLastQuestion) handleNext()
+    },
+    onSwipeRight: () => {
+      if (currentIndex > 0) handlePrevious()
+    },
+    threshold: 50,
+    disabled: isTextInputFocused || slidePhase !== 'idle',
+  })
 
   const handleSubmit = async () => {
     setIsSubmitting(true)
@@ -140,6 +210,10 @@ export function AssessmentModal({
       const durationSeconds = startTime ? Math.round((Date.now() - startTime) / 1000) : undefined
 
       await onSubmit(responseArray, durationSeconds)
+
+      // Trigger completion callback (for confetti, etc.)
+      onComplete?.()
+
       setShowCompletion(true)
 
       // Auto-close after showing completion
@@ -161,7 +235,9 @@ export function AssessmentModal({
       setCurrentIndex(0)
       setShowCompletion(false)
       setSelectedVersion(null)
-      setStartTime(null) // Reset start time for next use
+      setStartTime(null)
+      setSlideDirection(null)
+      setSlidePhase('idle')
     }
   }, [isOpen])
 
@@ -169,14 +245,42 @@ export function AssessmentModal({
     setSelectedVersion(version)
   }
 
+  // Calculate transform for the question card
+  const getTransform = () => {
+    // During drag, follow the finger
+    if (isDragging) {
+      return `translateX(${dragOffset}px)`
+    }
+
+    // During exit animation, slide off screen
+    if (slidePhase === 'exit') {
+      return slideDirection === 'left' ? 'translateX(-100%)' : 'translateX(100%)'
+    }
+
+    // During enter animation, start off screen (opposite direction)
+    if (slidePhase === 'enter') {
+      return slideDirection === 'left' ? 'translateX(100%)' : 'translateX(-100%)'
+    }
+
+    // Idle state
+    return 'translateX(0)'
+  }
+
+  const getTransition = () => {
+    if (isDragging) return 'none'
+    if (slidePhase === 'exit') return 'transform 0.25s ease-out'
+    if (slidePhase === 'enter') return 'none' // Instant snap to start position
+    return 'transform 0.2s ease-out' // Snap back if drag cancelled
+  }
+
   if (!isOpen) return null
 
   // Completion screen
   if (showCompletion) {
     return (
-      <div className="modal modal-open">
-        <div className="modal-box max-w-md text-center">
-          <div className="flex flex-col items-center gap-4 py-8">
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
+        <div className="w-full h-full sm:w-auto sm:h-auto sm:max-w-md bg-base-100 sm:rounded-2xl flex items-center justify-center p-8">
+          <div className="flex flex-col items-center gap-4 text-center">
             <div className="w-16 h-16 rounded-full bg-success/20 flex items-center justify-center">
               <CheckIcon className="w-10 h-10 text-success" />
             </div>
@@ -184,7 +288,6 @@ export function AssessmentModal({
             <p className="text-base-content/70">{completionMessage}</p>
           </div>
         </div>
-        <div className="modal-backdrop bg-black/50 backdrop-blur-sm" />
       </div>
     )
   }
@@ -192,8 +295,8 @@ export function AssessmentModal({
   // Version selection screen (only if version selector should be shown)
   if (shouldShowVersionSelector && !selectedVersion) {
     return (
-      <div className="modal modal-open">
-        <div className="modal-box max-w-3xl">
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
+        <div className="w-full h-full sm:w-auto sm:h-auto sm:max-w-3xl bg-base-100 sm:rounded-2xl flex flex-col p-4 sm:p-6">
           {/* Header */}
           <div className="flex items-center justify-between mb-4 md:mb-6">
             <h2 className="text-lg md:text-xl font-bold">{title}</h2>
@@ -203,20 +306,19 @@ export function AssessmentModal({
           </div>
 
           {/* Version Selector */}
-          <VersionSelector onSelect={handleVersionSelect} />
+          <div className="flex-1">
+            <VersionSelector onSelect={handleVersionSelect} />
+          </div>
         </div>
-
-        {/* Backdrop */}
-        <div className="modal-backdrop bg-black/70 backdrop-blur-sm" onClick={onClose} />
       </div>
     )
   }
 
   return (
-    <div className="modal modal-open">
-      <div className="modal-box max-w-4xl max-h-[90vh] overflow-y-auto">
+    <div className="fixed inset-0 z-50 flex items-center justify-center sm:p-4 bg-black/70 backdrop-blur-sm">
+      <div className="w-full h-full sm:w-[90vw] sm:max-w-4xl sm:h-auto sm:max-h-[90vh] bg-base-100 sm:rounded-2xl flex flex-col overflow-hidden">
         {/* Header */}
-        <div className="flex items-center justify-between mb-4 md:mb-6">
+        <div className="flex items-center justify-between p-4 sm:p-6 flex-shrink-0">
           <h2 className="text-lg md:text-xl font-bold">{title}</h2>
           <button type="button" onClick={onClose} className="btn btn-sm btn-circle btn-ghost">
             <XMarkIcon className="w-5 h-5" />
@@ -224,34 +326,58 @@ export function AssessmentModal({
         </div>
 
         {/* Progress */}
-        <ProgressBar
-          current={currentIndex + 1}
-          total={filteredQuestions.length}
-          className="mb-6 md:mb-8"
-        />
-
-        {/* Question */}
-        {currentQuestion && (
-          <QuestionCard
-            question={currentQuestion}
-            value={responses[currentQuestion.id]}
-            onChange={handleAnswer}
-            onNext={!isLastQuestion ? handleNext : undefined}
-            autoFocus
+        <div className="px-4 sm:px-6 flex-shrink-0">
+          <ProgressBar
+            current={currentIndex + 1}
+            total={filteredQuestions.length}
+            className="mb-2 sm:mb-4"
           />
-        )}
+        </div>
+
+        {/* Mobile swipe hint */}
+        <div className="flex sm:hidden justify-center text-xs text-base-content/40 mb-2 flex-shrink-0">
+          Swipe to navigate
+        </div>
+
+        {/* Question with swipe handling */}
+        <div className="flex-1 overflow-hidden px-4 sm:px-6 pb-6" {...swipeHandlers}>
+          <div
+            className="h-full"
+            style={{
+              transform: getTransform(),
+              transition: getTransition(),
+            }}
+            onTransitionEnd={() => {
+              if (slidePhase === 'exit') {
+                handleExitComplete()
+              }
+            }}
+          >
+            {currentQuestion && (
+              <QuestionCard
+                question={currentQuestion}
+                value={responses[currentQuestion.id]}
+                onChange={handleAnswer}
+                onNext={isLastQuestion ? handleSubmit : handleNext}
+                onTextFocus={() => setIsTextInputFocused(true)}
+                onTextBlur={() => setIsTextInputFocused(false)}
+                autoFocus
+              />
+            )}
+          </div>
+        </div>
 
         {/* Navigation */}
-        <div className="flex flex-col-reverse md:flex-row items-stretch md:items-center justify-between gap-3 mt-6 md:mt-8 pt-4 md:pt-6 border-t border-base-300">
-          {/* Previous button - Left side on desktop, bottom on mobile */}
+        <div className="flex flex-row items-center justify-between gap-3 p-4 md:p-6 border-t border-base-300 flex-shrink-0">
+          {/* Previous button - Icon only on mobile/tablet, with text on desktop */}
           <button
             type="button"
             onClick={handlePrevious}
-            disabled={currentIndex === 0}
-            className="btn btn-ghost gap-2"
+            disabled={currentIndex === 0 || slidePhase !== 'idle'}
+            className="btn btn-ghost btn-sm md:btn-md"
           >
             <ChevronLeftIcon className="w-5 h-5" />
-            Previous
+            <span className="hidden md:inline">Previous</span>
           </button>
 
           {/* Keyboard hints - Center on desktop, hidden on mobile */}
@@ -274,27 +400,27 @@ export function AssessmentModal({
             )}
           </div>
 
-          {/* Next/Submit/Close button - Right side on desktop, top on mobile */}
+          {/* Next/Submit/Close button - Icon only on mobile/tablet, with text on desktop */}
           {isLastQuestion ? (
             <button
               type="button"
               onClick={previewMode ? onClose : handleSubmit}
-              disabled={!previewMode && (!canGoNext || isSubmitting)}
-              className="btn btn-primary gap-2"
+              disabled={!previewMode && (!canGoNext || isSubmitting || slidePhase !== 'idle')}
+              className="btn btn-primary btn-sm md:btn-md"
             >
               {previewMode ? (
                 <>
-                  Close
+                  <span className="hidden md:inline">Close</span>
                   <XMarkIcon className="w-5 h-5" />
                 </>
               ) : isSubmitting ? (
                 <>
                   <span className="loading loading-spinner loading-sm" />
-                  Submitting...
+                  <span className="hidden md:inline">Submitting...</span>
                 </>
               ) : (
                 <>
-                  Submit
+                  <span className="hidden md:inline">Submit</span>
                   <CheckIcon className="w-5 h-5" />
                 </>
               )}
@@ -303,18 +429,15 @@ export function AssessmentModal({
             <button
               type="button"
               onClick={handleNext}
-              disabled={!canGoNext}
-              className="btn btn-primary gap-2"
+              disabled={!canGoNext || slidePhase !== 'idle'}
+              className="btn btn-primary btn-sm md:btn-md"
             >
-              Next
+              <span className="hidden md:inline">Next</span>
               <ChevronRightIcon className="w-5 h-5" />
             </button>
           )}
         </div>
       </div>
-
-      {/* Backdrop */}
-      <div className="modal-backdrop bg-black/70 backdrop-blur-sm" onClick={onClose} />
     </div>
   )
 }
