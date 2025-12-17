@@ -1,3 +1,4 @@
+import { PencilIcon } from '@heroicons/react/24/outline'
 import { useEffect, useRef } from 'react'
 import { ChoiceResponse } from './ChoiceResponse'
 import { LikertScale } from './LikertScale'
@@ -12,6 +13,8 @@ export function QuestionCard({
   autoFocus,
   onTextFocus,
   onTextBlur,
+  previewMode,
+  onEditQuestion,
 }: QuestionCardProps) {
   const containerRef = useRef<HTMLDivElement>(null)
 
@@ -224,7 +227,19 @@ export function QuestionCard({
     <div ref={containerRef} className="space-y-6">
       {/* Question text */}
       <div className="text-center space-y-2">
-        <h3 className="text-2xl font-semibold">{question.text}</h3>
+        <div className="flex items-center justify-center gap-2">
+          <h3 className="text-2xl font-semibold">{question.text}</h3>
+          {previewMode && onEditQuestion && (
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm btn-circle"
+              onClick={() => onEditQuestion(question.id)}
+              title="Edit this question"
+            >
+              <PencilIcon className="w-4 h-4" />
+            </button>
+          )}
+        </div>
         {question.helpText && <p className="text-sm text-base-content/60">{question.helpText}</p>}
         {!question.required && <p className="text-xs text-base-content/50">(Optional)</p>}
       </div>

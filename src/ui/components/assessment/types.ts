@@ -36,6 +36,7 @@ export interface AssessmentModalProps {
   completionMessage?: string // Default: "Your feedback has been submitted successfully."
   previewMode?: boolean // If true, allows browsing questions without saving responses
   onComplete?: () => void // Called after successful submission (for confetti, etc.)
+  onEditQuestion?: (questionId: string) => void // Called when edit button is clicked (only shown in previewMode)
 }
 
 export interface QuestionCardProps {
@@ -46,6 +47,8 @@ export interface QuestionCardProps {
   autoFocus?: boolean
   onTextFocus?: () => void
   onTextBlur?: () => void
+  previewMode?: boolean
+  onEditQuestion?: (questionId: string) => void
 }
 
 export interface LikertScaleProps {

@@ -29,6 +29,7 @@ export function AssessmentModal({
   completionMessage = 'Your feedback has been submitted successfully.',
   previewMode = false,
   onComplete,
+  onEditQuestion,
 }: AssessmentModalProps) {
   // Auto-detect if version selector should be shown
   // Show if explicitly enabled, or if any question has a 'version' property
@@ -489,6 +490,8 @@ export function AssessmentModal({
                 onTextFocus={() => setIsTextInputFocused(true)}
                 onTextBlur={() => setIsTextInputFocused(false)}
                 autoFocus
+                previewMode={previewMode}
+                onEditQuestion={onEditQuestion}
               />
             )}
           </div>
