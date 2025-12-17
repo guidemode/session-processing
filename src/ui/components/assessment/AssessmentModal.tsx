@@ -5,6 +5,7 @@ import {
   ChevronRightIcon,
   XMarkIcon,
 } from '@heroicons/react/24/outline'
+import confetti from 'canvas-confetti'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useSwipe } from '../../hooks/useSwipe'
 import { ProgressBar } from './ProgressBar'
@@ -240,6 +241,132 @@ export function AssessmentModal({
       setSlidePhase('idle')
     }
   }, [isOpen])
+
+  // Fire confetti when completion screen is shown
+  useEffect(() => {
+    if (showCompletion) {
+      const colors = ['#10b981', '#f59e0b', '#3b82f6', '#8b5cf6', '#ec4899', '#06b6d4', '#f43f5e']
+
+      // Different confetti effects to randomly choose from
+      const effects = [
+        // Side cannons - continuous stream from both sides
+        () => {
+          const duration = 2000
+          const end = Date.now() + duration
+          const frame = () => {
+            confetti({
+              particleCount: 3,
+              angle: 60,
+              spread: 55,
+              origin: { x: 0, y: 0.6 },
+              colors,
+            })
+            confetti({
+              particleCount: 3,
+              angle: 120,
+              spread: 55,
+              origin: { x: 1, y: 0.6 },
+              colors,
+            })
+            if (Date.now() < end) requestAnimationFrame(frame)
+          }
+          frame()
+        },
+
+        // Big burst from center
+        () => {
+          confetti({
+            particleCount: 100,
+            spread: 70,
+            origin: { x: 0.5, y: 0.5 },
+            colors,
+          })
+          setTimeout(() => {
+            confetti({
+              particleCount: 50,
+              spread: 100,
+              origin: { x: 0.5, y: 0.5 },
+              colors,
+              startVelocity: 45,
+            })
+          }, 200)
+        },
+
+        // Fireworks - multiple bursts shooting up
+        () => {
+          const count = 200
+          const defaults = { origin: { y: 0.7 }, colors }
+
+          function fire(particleRatio: number, opts: confetti.Options) {
+            confetti({
+              ...defaults,
+              particleCount: Math.floor(count * particleRatio),
+              ...opts,
+            })
+          }
+
+          fire(0.25, { spread: 26, startVelocity: 55 })
+          fire(0.2, { spread: 60 })
+          fire(0.35, { spread: 100, decay: 0.91, scalar: 0.8 })
+          fire(0.1, { spread: 120, startVelocity: 25, decay: 0.92, scalar: 1.2 })
+          fire(0.1, { spread: 120, startVelocity: 45 })
+        },
+
+        // Stars and circles mix
+        () => {
+          const defaults = { colors, ticks: 200, gravity: 1.2, decay: 0.94, startVelocity: 30 }
+          confetti({
+            ...defaults,
+            particleCount: 40,
+            shapes: ['star'],
+            scalar: 1.2,
+            spread: 80,
+            origin: { x: 0.5, y: 0.5 },
+          })
+          confetti({
+            ...defaults,
+            particleCount: 30,
+            shapes: ['circle'],
+            scalar: 0.8,
+            spread: 60,
+            origin: { x: 0.5, y: 0.5 },
+          })
+          setTimeout(() => {
+            confetti({
+              ...defaults,
+              particleCount: 50,
+              shapes: ['star', 'circle'],
+              spread: 100,
+              origin: { x: 0.5, y: 0.6 },
+            })
+          }, 300)
+        },
+
+        // Rain down from top
+        () => {
+          const duration = 1500
+          const end = Date.now() + duration
+          const frame = () => {
+            confetti({
+              particleCount: 2,
+              angle: 270,
+              spread: 180,
+              origin: { x: Math.random(), y: 0 },
+              colors,
+              gravity: 0.8,
+              drift: Math.random() - 0.5,
+            })
+            if (Date.now() < end) requestAnimationFrame(frame)
+          }
+          frame()
+        },
+      ]
+
+      // Pick a random effect
+      const randomEffect = effects[Math.floor(Math.random() * effects.length)]
+      randomEffect()
+    }
+  }, [showCompletion])
 
   const handleVersionSelect = (version: AssessmentVersion) => {
     setSelectedVersion(version)
