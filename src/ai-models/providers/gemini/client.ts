@@ -132,14 +132,14 @@ export class GeminiAPIClient {
 
     const response = await this.generateContent(messages, options)
 
-    // Extract text from response
-    const text = response.candidates[0]?.content.parts.map(part => part.text).join('\n') || ''
+    // Extract text from response (handle Gemini 3's potential different response structure)
+    const text = response.candidates?.[0]?.content?.parts?.map(part => part.text).join('\n') || ''
 
     return {
       text,
       usage: {
-        input_tokens: response.usageMetadata.promptTokenCount,
-        output_tokens: response.usageMetadata.candidatesTokenCount,
+        input_tokens: response.usageMetadata?.promptTokenCount ?? 0,
+        output_tokens: response.usageMetadata?.candidatesTokenCount ?? 0,
       },
     }
   }
@@ -176,11 +176,11 @@ export class GeminiAPIClient {
       responseMimeType: 'application/json',
     })
 
-    // Extract text from response
-    const text = response.candidates[0]?.content.parts.map(part => part.text).join('\n') || ''
+    // Extract text from response (handle Gemini 3's potential different response structure)
+    const text = response.candidates?.[0]?.content?.parts?.map(part => part.text).join('\n') || ''
     const usage = {
-      input_tokens: response.usageMetadata.promptTokenCount,
-      output_tokens: response.usageMetadata.candidatesTokenCount,
+      input_tokens: response.usageMetadata?.promptTokenCount ?? 0,
+      output_tokens: response.usageMetadata?.candidatesTokenCount ?? 0,
     }
 
     // Parse JSON from response
