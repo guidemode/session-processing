@@ -39,6 +39,7 @@ export function AssessmentModal({
   const [selectedVersion, setSelectedVersion] = useState<AssessmentVersion | null>(null)
   const [currentIndex, setCurrentIndex] = useState(0)
   const [responses, setResponses] = useState<Record<string, AssessmentAnswer>>(initialResponses)
+  const responsesRef = useRef<Record<string, AssessmentAnswer>>(initialResponses)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [startTime, setStartTime] = useState<number | null>(null)
   const [showCompletion, setShowCompletion] = useState(false)
@@ -149,10 +150,14 @@ export function AssessmentModal({
 
   const handleAnswer = useCallback(
     (answer: AssessmentAnswer) => {
-      setResponses(prev => ({
-        ...prev,
-        [currentQuestion.id]: answer,
-      }))
+      setResponses(prev => {
+        const nextResponses = {
+          ...prev,
+          [currentQuestion.id]: answer,
+        }
+        responsesRef.current = nextResponses
+        return nextResponses
+      })
     },
     [currentQuestion]
   )
@@ -200,7 +205,7 @@ export function AssessmentModal({
     setIsSubmitting(true)
 
     try {
-      const responseArray: AssessmentResponse[] = Object.entries(responses).map(
+      const responseArray: AssessmentResponse[] = Object.entries(responsesRef.current).map(
         ([questionId, answer]) => ({
           questionId,
           answer,
@@ -240,8 +245,10 @@ export function AssessmentModal({
       setStartTime(null)
       setSlideDirection(null)
       setSlidePhase('idle')
+      responsesRef.current = initialResponses
+      setResponses(initialResponses)
     }
-  }, [isOpen])
+  }, [isOpen, initialResponses])
 
   // Fire confetti when completion screen is shown
   useEffect(() => {
