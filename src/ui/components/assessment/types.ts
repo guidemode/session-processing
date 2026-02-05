@@ -2,6 +2,7 @@ import type {
   AssessmentAnswer,
   AssessmentQuestionConfig,
   AssessmentResponse,
+  SurveyChoice,
 } from '@guidemode/types'
 
 // Base question interface that both AssessmentQuestionConfig and SurveyQuestion can satisfy
@@ -11,7 +12,7 @@ export interface BaseQuestionConfig {
   type: 'likert-5' | 'likert-7' | 'nps' | 'text' | 'choice' | 'number' | 'boolean'
   required: boolean
   labels?: [string, string]
-  choices?: string[]
+  choices?: SurveyChoice[] // Array of choice objects with id and text
   placeholder?: string
   helpText?: string
   reverseScored?: boolean

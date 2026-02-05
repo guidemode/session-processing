@@ -1,6 +1,8 @@
+import type { SurveyChoice } from '@guidemode/types'
+
 interface ChoiceResponseProps {
-  choices: string[]
-  value?: string
+  choices: SurveyChoice[]
+  value?: string // Choice ID
   onChange: (value: string) => void
   disabled?: boolean
 }
@@ -23,14 +25,14 @@ export function ChoiceResponse({
   return (
     <div className="space-y-2">
       {choices.map((choice, index) => {
-        const isSelected = value === choice
+        const isSelected = value === choice.id
         const keyHint = getKeyboardHint(index)
 
         return (
           <button
-            key={choice}
+            key={choice.id}
             type="button"
-            onClick={() => !disabled && onChange(choice)}
+            onClick={() => !disabled && onChange(choice.id)}
             disabled={disabled}
             className={`
               w-full text-left px-4 py-3 rounded-lg
@@ -52,7 +54,7 @@ export function ChoiceResponse({
               >
                 {isSelected && <div className="w-3 h-3 rounded-full bg-primary-content" />}
               </div>
-              <span className="flex-1">{choice}</span>
+              <span className="flex-1">{choice.text}</span>
               {keyHint && (
                 <kbd
                   className={`hidden md:inline kbd kbd-sm ${isSelected ? 'opacity-70' : 'opacity-50'}`}

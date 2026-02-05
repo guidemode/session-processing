@@ -66,7 +66,7 @@ export function QuestionCard({
 
         if (choiceIndex >= 0) {
           e.preventDefault()
-          handleChoiceChange(question.choices[choiceIndex])
+          handleChoiceChange(question.choices[choiceIndex].id)
         }
       }
     }
