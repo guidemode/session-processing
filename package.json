@@ -1,6 +1,6 @@
 {
   "name": "@guidemode/session-processing",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "description": "Shared session processing, metrics calculation, AI processing, and UI components for GuideMode",
   "type": "module",
   "main": "./dist/cjs/index.js",
