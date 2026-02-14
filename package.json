@@ -1,6 +1,6 @@
 {
   "name": "@guidemode/session-processing",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Shared session processing, metrics calculation, AI processing, and UI components for GuideMode",
   "type": "module",
   "main": "./dist/cjs/index.js",
@@ -64,7 +64,7 @@
     "lint:fix": "biome check --write src"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.32.1",
+    "@anthropic-ai/sdk": "^0.74.0",
     "@google/generative-ai": "^0.21.0",
     "@guidemode/types": "workspace:*",
     "canvas-confetti": "^1.9.4"
