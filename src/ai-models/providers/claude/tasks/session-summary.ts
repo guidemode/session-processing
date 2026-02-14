@@ -27,7 +27,14 @@ export class SessionSummaryTask extends BaseModelTask<SessionSummaryInput, strin
   getConfig(): ModelTaskConfig {
     return {
       taskType: this.taskType,
-      prompt: `You are analyzing an AI coding agent session. Generate a concise 2-3 sentence summary describing what {{userName}} was trying to accomplish and what actions the agent took.
+      prompt: `You are analyzing an AI coding agent session. Generate a concise 2-3 sentence summary focusing on:
+1. What was {{userName}}'s goal or intent?
+2. What was concretely achieved (files created, bugs fixed, features added, etc.)?
+3. Was the work completed or left incomplete?
+
+If the first user message is a pasted plan (e.g. starts with "Implement the following plan"), note the broader goal being implemented.
+
+Do NOT describe what the AI agent did (e.g. "the agent read files and wrote code"). Focus on outcomes from {{userName}}'s perspective.
 
 Session Details:
 - Provider: {{provider}}
