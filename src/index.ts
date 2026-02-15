@@ -35,3 +35,6 @@ export * from './ui/index.js'
 
 // Export utils
 export * from './utils/index.js'
+
+// Export redaction
+export * from './redaction/index.js'

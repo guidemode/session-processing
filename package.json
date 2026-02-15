@@ -41,6 +41,11 @@
       "types": "./dist/esm/validation/index.d.ts",
       "import": "./dist/esm/validation/index.js",
       "require": "./dist/cjs/validation/index.js"
+    },
+    "./redaction": {
+      "types": "./dist/esm/redaction/index.d.ts",
+      "import": "./dist/esm/redaction/index.js",
+      "require": "./dist/cjs/redaction/index.js"
     }
   },
   "files": [
