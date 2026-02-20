@@ -1,7 +1,9 @@
 /**
  * Gemini API Client
- * Wrapper for Google's Gemini API
+ * Wrapper for Google's Gemini API (supports Gemini 3 thinking config)
  */
+
+export type GeminiThinkingLevel = 'minimal' | 'low' | 'medium' | 'high'
 
 export interface GeminiMessage {
   role: 'user' | 'model'
@@ -16,6 +18,9 @@ export interface GeminiRequest {
     topP?: number
     maxOutputTokens?: number
     responseMimeType?: string
+    thinkingConfig?: {
+      thinkingLevel?: GeminiThinkingLevel
+    }
   }
   systemInstruction?: {
     parts: Array<{ text: string }>
@@ -35,6 +40,7 @@ export interface GeminiResponse {
     promptTokenCount: number
     candidatesTokenCount: number
     totalTokenCount: number
+    thoughtsTokenCount?: number
   }
 }
 
@@ -55,6 +61,7 @@ export interface GeminiClientConfig {
   maxOutputTokens?: number
   temperature?: number
   timeout?: number
+  thinkingLevel?: GeminiThinkingLevel
   fetch?: typeof fetch
 }
 
@@ -64,6 +71,7 @@ export class GeminiAPIClient {
   private defaultModel: string
   private defaultMaxOutputTokens: number
   private defaultTemperature: number
+  private defaultThinkingLevel: GeminiThinkingLevel | undefined
   private timeout: number
   private fetchFn: typeof fetch
 
@@ -72,6 +80,7 @@ export class GeminiAPIClient {
     this.defaultModel = config.model || 'gemini-2.0-flash'
     this.defaultMaxOutputTokens = config.maxOutputTokens || 8192
     this.defaultTemperature = config.temperature ?? 1.0
+    this.defaultThinkingLevel = config.thinkingLevel
     this.timeout = config.timeout || 60000 // 60 seconds
     // Bind fetch to preserve 'this' context in Cloudflare Workers
     this.fetchFn = config.fetch || ((...args) => fetch(...args))
@@ -88,9 +97,11 @@ export class GeminiAPIClient {
       temperature?: number
       systemInstruction?: string
       responseMimeType?: string
+      thinkingLevel?: GeminiThinkingLevel
     }
   ): Promise<GeminiResponse> {
     const model = options?.model || this.defaultModel
+    const thinkingLevel = options?.thinkingLevel ?? this.defaultThinkingLevel
 
     const request: GeminiRequest = {
       contents: messages,
@@ -98,6 +109,7 @@ export class GeminiAPIClient {
         temperature: options?.temperature ?? this.defaultTemperature,
         maxOutputTokens: options?.maxOutputTokens || this.defaultMaxOutputTokens,
         ...(options?.responseMimeType && { responseMimeType: options.responseMimeType }),
+        ...(thinkingLevel && { thinkingConfig: { thinkingLevel } }),
       },
     }
 
@@ -121,6 +133,7 @@ export class GeminiAPIClient {
       maxOutputTokens?: number
       temperature?: number
       systemInstruction?: string
+      thinkingLevel?: GeminiThinkingLevel
     }
   ): Promise<{ text: string; usage: { input_tokens: number; output_tokens: number } }> {
     const messages: GeminiMessage[] = [
@@ -155,6 +168,7 @@ export class GeminiAPIClient {
       maxOutputTokens?: number
       temperature?: number
       systemInstruction?: string
+      thinkingLevel?: GeminiThinkingLevel
     }
   ): Promise<{ data: T; usage: { input_tokens: number; output_tokens: number } }> {
     // Add JSON formatting instruction to system prompt
@@ -177,10 +191,20 @@ export class GeminiAPIClient {
     })
 
     // Extract text from response (handle Gemini 3's potential different response structure)
-    const text = response.candidates?.[0]?.content?.parts?.map(part => part.text).join('\n') || ''
+    const candidate = response.candidates?.[0]
+    const text = candidate?.content?.parts?.map(part => part.text).join('\n') || ''
     const usage = {
       input_tokens: response.usageMetadata?.promptTokenCount ?? 0,
       output_tokens: response.usageMetadata?.candidatesTokenCount ?? 0,
+    }
+    const thoughtsTokenCount = response.usageMetadata?.thoughtsTokenCount ?? 0
+
+    // Check if response was truncated due to output token limit
+    const finishReason = candidate?.finishReason
+    if (finishReason === 'MAX_TOKENS') {
+      throw new Error(
+        `AI response truncated (output token limit reached). Used ${usage.output_tokens} output tokens${thoughtsTokenCount > 0 ? ` + ${thoughtsTokenCount} thinking tokens` : ''}. Increase maxOutputTokens or reduce prompt complexity.`
+      )
     }
 
     // Parse JSON from response
@@ -306,7 +330,17 @@ export class GeminiAPIClient {
           }
         }
 
-        throw new Error(`Gemini API error (${response.status}): ${errorMessage}`)
+        // Provide user-friendly messages for common error codes
+        const statusHints: Record<number, string> = {
+          429: 'Rate limit exceeded — too many requests to the AI provider.',
+          500: 'AI provider internal error — please retry.',
+          503: 'AI provider temporarily unavailable — please retry.',
+          524: 'AI provider request timed out — the transcript may be too long or the service is under heavy load.',
+        }
+        const hint = statusHints[response.status]
+        const prefix = hint || `Gemini API error (${response.status})`
+
+        throw new Error(`${prefix} ${errorMessage}`)
       }
 
       return await response.json()
