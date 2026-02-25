@@ -224,7 +224,18 @@ export class ClaudeAPIClient {
 
       if (!response.ok) {
         const errorText = await response.text()
-        throw new Error(`Claude API error (${response.status}): ${errorText}`)
+        let errorMessage = errorText
+        try {
+          const errorJson = JSON.parse(errorText)
+          if (errorJson.error?.message) {
+            errorMessage = errorJson.error.message
+          }
+        } catch {
+          if (errorText.length > 200) {
+            errorMessage = `${errorText.substring(0, 200)}...`
+          }
+        }
+        throw new Error(`Claude API error (${response.status}): ${errorMessage}`)
       }
 
       return await response.json()

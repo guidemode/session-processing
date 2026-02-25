@@ -13,6 +13,7 @@ export interface OpenAIRequest {
   messages: OpenAIMessage[]
   temperature?: number
   max_tokens?: number
+  max_completion_tokens?: number
   response_format?: { type: 'json_object' | 'text' }
 }
 
@@ -55,6 +56,7 @@ export interface OpenAIClientConfig {
   temperature?: number
   timeout?: number
   fetch?: typeof fetch
+  baseUrl?: string
 }
 
 export class OpenAIAPIClient {
@@ -68,6 +70,7 @@ export class OpenAIAPIClient {
 
   constructor(config: OpenAIClientConfig) {
     this.apiKey = config.apiKey
+    if (config.baseUrl) this.baseUrl = config.baseUrl
     this.defaultModel = config.model || 'gpt-4o-mini'
     this.defaultMaxTokens = config.maxTokens || 4096
     this.defaultTemperature = config.temperature ?? 1.0
@@ -87,11 +90,18 @@ export class OpenAIAPIClient {
       responseFormat?: 'json_object' | 'text'
     }
   ): Promise<OpenAIResponse> {
+    const model = options?.model || this.defaultModel
+    const maxTokens = options?.maxTokens || this.defaultMaxTokens
+    const isNewModel = /^(gpt-5|o[1-9])/.test(model)
+
     const request: OpenAIRequest = {
-      model: options?.model || this.defaultModel,
+      model,
       messages,
-      temperature: options?.temperature ?? this.defaultTemperature,
-      max_tokens: options?.maxTokens || this.defaultMaxTokens,
+      // gpt-5.x and o-series only support temperature=1
+      ...(!isNewModel && { temperature: options?.temperature ?? this.defaultTemperature }),
+      ...(isNewModel
+        ? { max_completion_tokens: maxTokens }
+        : { max_tokens: maxTokens }),
       ...(options?.responseFormat && {
         response_format: { type: options.responseFormat },
       }),
