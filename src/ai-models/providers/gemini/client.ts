@@ -102,6 +102,8 @@ export class GeminiAPIClient {
   ): Promise<GeminiResponse> {
     const model = options?.model || this.defaultModel
     const thinkingLevel = options?.thinkingLevel ?? this.defaultThinkingLevel
+    // Only include thinkingConfig for models that support it (Gemini 3+)
+    const supportsThinking = model.includes('gemini-3') || model.includes('gemini-exp')
 
     const request: GeminiRequest = {
       contents: messages,
@@ -109,7 +111,7 @@ export class GeminiAPIClient {
         temperature: options?.temperature ?? this.defaultTemperature,
         maxOutputTokens: options?.maxOutputTokens || this.defaultMaxOutputTokens,
         ...(options?.responseMimeType && { responseMimeType: options.responseMimeType }),
-        ...(thinkingLevel && { thinkingConfig: { thinkingLevel } }),
+        ...(supportsThinking && thinkingLevel && { thinkingConfig: { thinkingLevel } }),
       },
     }
 
