@@ -48,10 +48,7 @@
       "require": "./dist/cjs/redaction/index.js"
     }
   },
-  "files": [
-    "dist",
-    "index.css"
-  ],
+  "files": ["dist", "index.css"],
   "scripts": {
     "build": "pnpm run clean && pnpm run build:esm && pnpm run build:cjs && pnpm run build:cjs-package",
     "build:esm": "tsc -p tsconfig.json",
@@ -124,28 +121,22 @@
   },
   "devDependencies": {
     "@heroicons/react": "^2.2.0",
-    "@tanstack/react-virtual": "^3.13.12",
+    "@tanstack/react-virtual": "^3.14.5",
     "@types/canvas-confetti": "^1.9.0",
-    "@types/dompurify": "^3.0.5",
+    "@types/dompurify": "^3.2.0",
     "@types/marked": "^6.0.0",
-    "@types/prismjs": "^1.26.0",
-    "@types/react": "^18.3.24",
+    "@types/prismjs": "^1.26.6",
+    "@types/react": "^18.3.31",
     "@types/react-syntax-highlighter": "^15.5.13",
-    "@vitest/coverage-v8": "^3.2.4",
-    "dompurify": "^3.0.8",
-    "marked": "^11.0.0",
-    "prismjs": "^1.29.0",
-    "react-markdown": "^9.0.1",
-    "react-syntax-highlighter": "^15.6.1",
+    "@vitest/coverage-v8": "^3.2.7",
+    "dompurify": "^3.4.11",
+    "marked": "^11.2.0",
+    "prismjs": "^1.30.0",
+    "react-markdown": "^9.1.0",
+    "react-syntax-highlighter": "^15.6.6",
     "recharts": "^2.15.4",
-    "typescript": "^5.7.2",
-    "vitest": "^3.2.4"
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.7"
   },
-  "keywords": [
-    "session-processing",
-    "metrics",
-    "ai",
-    "typescript",
-    "guidemode"
-  ]
+  "keywords": ["session-processing", "metrics", "ai", "typescript", "guidemode"]
 }

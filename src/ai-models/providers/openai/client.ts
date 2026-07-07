@@ -99,9 +99,7 @@ export class OpenAIAPIClient {
       messages,
       // gpt-5.x and o-series only support temperature=1
       ...(!isNewModel && { temperature: options?.temperature ?? this.defaultTemperature }),
-      ...(isNewModel
-        ? { max_completion_tokens: maxTokens }
-        : { max_tokens: maxTokens }),
+      ...(isNewModel ? { max_completion_tokens: maxTokens } : { max_tokens: maxTokens }),
       ...(options?.responseFormat && {
         response_format: { type: options.responseFormat },
       }),
