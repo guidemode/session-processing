@@ -34,6 +34,23 @@ export function QuestionCard({
 
       const key = e.key.toLowerCase()
 
+      // Only single-character keys are answer shortcuts. Named keys like
+      // "ArrowRight" must never match — lowercased they compare as within
+      // 'a'..'z' and previously selected choice "a" + ghost auto-advanced,
+      // skipping the following question during arrow-key navigation.
+      if (key.length !== 1) return
+
+      // Type-to-focus for free-text questions: the field starts unfocused so
+      // arrow navigation keeps working, but any printable character focuses
+      // the textarea and the browser delivers that same keystroke into it —
+      // the first character isn't lost. Space is excluded (it would hijack
+      // activating a focused button, and a leading space adds nothing).
+      if (question.type === 'text') {
+        if (e.ctrlKey || e.metaKey || e.altKey || key === ' ') return
+        containerRef.current?.querySelector('textarea')?.focus()
+        return
+      }
+
       // Number keys for Likert scales (but not NPS - too many options for keyboard)
       if (question.type === 'likert-5' || question.type === 'likert-7') {
         const maxScale = question.type === 'likert-5' ? 5 : 7

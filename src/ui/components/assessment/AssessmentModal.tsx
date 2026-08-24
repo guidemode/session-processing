@@ -107,11 +107,18 @@ export function AssessmentModal({
       // Ignore if animation is in progress (check ref for latest value)
       if (slidePhaseRef.current !== 'idle') return
 
-      // Ignore arrow keys if user is typing in a text field
-      if (
-        e.target instanceof HTMLTextAreaElement &&
-        (e.key === 'ArrowLeft' || e.key === 'ArrowRight')
-      ) {
+      // While typing in the answer textarea: Enter advances (Shift+Enter
+      // inserts a newline), Escape leaves the field (returning to arrow
+      // navigation) instead of closing the modal mid-answer, and arrows
+      // move the caret rather than navigating the survey.
+      if (e.target instanceof HTMLTextAreaElement) {
+        if (e.key === 'Escape') {
+          e.target.blur()
+        } else if (e.key === 'Enter' && !e.shiftKey && canGoNext && !isLastQuestion) {
+          e.preventDefault()
+          e.target.blur()
+          triggerSlide('left', currentIndex + 1)
+        }
         return
       }
 
@@ -534,6 +541,12 @@ export function AssessmentModal({
             )}
             {currentQuestion?.type === 'choice' && (
               <div className="text-base-content/40">Use number or letter keys • Auto-advances</div>
+            )}
+            {currentQuestion?.type === 'text' && (
+              <div className="text-base-content/40">
+                Start typing to answer • <kbd className="kbd kbd-xs">Enter</kbd> next •{' '}
+                <kbd className="kbd kbd-xs">Shift+Enter</kbd> new line
+              </div>
             )}
           </div>
 

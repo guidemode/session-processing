@@ -64,7 +64,7 @@ export class ClaudeAPIClient {
   private baseUrl = 'https://api.anthropic.com/v1'
   private defaultModel: string
   private defaultMaxTokens: number
-  private defaultTemperature: number
+  private defaultTemperature: number | undefined
   private timeout: number
   private fetchFn: typeof fetch
 
@@ -72,7 +72,7 @@ export class ClaudeAPIClient {
     this.apiKey = config.apiKey
     this.defaultModel = config.model || 'claude-3-5-sonnet-20241022'
     this.defaultMaxTokens = config.maxTokens || 4096
-    this.defaultTemperature = config.temperature ?? 1.0
+    this.defaultTemperature = config.temperature
     this.timeout = config.timeout || 60000 // 60 seconds
     this.fetchFn = config.fetch || fetch
   }
@@ -89,16 +89,32 @@ export class ClaudeAPIClient {
       system?: string
     }
   ): Promise<ClaudeResponse> {
+    const temperature = options?.temperature ?? this.defaultTemperature
     const request: ClaudeRequest = {
       model: options?.model || this.defaultModel,
       max_tokens: options?.maxTokens || this.defaultMaxTokens,
       messages,
-      temperature: options?.temperature ?? this.defaultTemperature,
+      ...(temperature !== undefined && { temperature }),
       ...(options?.system && { system: options.system }),
     }
 
-    const response = await this.makeRequest('/messages', request)
-    return response as ClaudeResponse
+    try {
+      const response = await this.makeRequest('/messages', request)
+      return response as ClaudeResponse
+    } catch (error) {
+      // Newer Claude models reject the temperature parameter entirely
+      // ("`temperature` is deprecated for this model") — retry without it.
+      if (
+        temperature !== undefined &&
+        error instanceof Error &&
+        error.message.includes('`temperature` is deprecated')
+      ) {
+        const { temperature: _omitted, ...withoutTemperature } = request
+        const response = await this.makeRequest('/messages', withoutTemperature)
+        return response as ClaudeResponse
+      }
+      throw error
+    }
   }
 
   /**
