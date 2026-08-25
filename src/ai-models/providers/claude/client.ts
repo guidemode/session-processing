@@ -70,7 +70,7 @@ export class ClaudeAPIClient {
 
   constructor(config: ClaudeClientConfig) {
     this.apiKey = config.apiKey
-    this.defaultModel = config.model || 'claude-3-5-sonnet-20241022'
+    this.defaultModel = config.model || 'claude-sonnet-5'
     this.defaultMaxTokens = config.maxTokens || 4096
     this.defaultTemperature = config.temperature
     this.timeout = config.timeout || 60000 // 60 seconds

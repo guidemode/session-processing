@@ -24,7 +24,7 @@ export class ClaudeModelAdapter extends BaseModelAdapter {
 
     this.client = new ClaudeAPIClient({
       apiKey: config.apiKey,
-      model: config.model || 'claude-3-5-sonnet-20241022',
+      model: config.model || 'claude-sonnet-5',
       maxTokens: config.maxTokens || 4096,
       temperature: config.temperature ?? 1.0,
       timeout: config.timeout,
@@ -103,7 +103,7 @@ export class ClaudeModelAdapter extends BaseModelAdapter {
         success: true,
         output,
         metadata: {
-          modelUsed: this.config.model || 'claude-3-5-sonnet-20241022',
+          modelUsed: this.config.model || 'claude-sonnet-5',
           tokensUsed,
           processingTime,
           cost,
@@ -119,7 +119,7 @@ export class ClaudeModelAdapter extends BaseModelAdapter {
         success: false,
         output: null,
         metadata: {
-          modelUsed: this.config.model || 'claude-3-5-sonnet-20241022',
+          modelUsed: this.config.model || 'claude-sonnet-5',
           processingTime,
           error: error instanceof Error ? error.message : 'Unknown error',
         },

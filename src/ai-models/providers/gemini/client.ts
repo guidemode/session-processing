@@ -77,7 +77,7 @@ export class GeminiAPIClient {
 
   constructor(config: GeminiClientConfig) {
     this.apiKey = config.apiKey
-    this.defaultModel = config.model || 'gemini-2.0-flash'
+    this.defaultModel = config.model || 'gemini-3.7-flash'
     this.defaultMaxOutputTokens = config.maxOutputTokens || 8192
     this.defaultTemperature = config.temperature ?? 1.0
     this.defaultThinkingLevel = config.thinkingLevel

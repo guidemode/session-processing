@@ -24,7 +24,7 @@ export class GeminiModelAdapter extends BaseModelAdapter {
 
     this.client = new GeminiAPIClient({
       apiKey: config.apiKey,
-      model: config.model || 'gemini-2.0-flash-lite',
+      model: config.model || 'gemini-3.7-flash',
       maxOutputTokens: config.maxTokens || 8192,
       temperature: config.temperature ?? 1.0,
       timeout: config.timeout,
@@ -103,7 +103,7 @@ export class GeminiModelAdapter extends BaseModelAdapter {
         success: true,
         output,
         metadata: {
-          modelUsed: this.config.model || 'gemini-2.0-flash',
+          modelUsed: this.config.model || 'gemini-3.7-flash',
           tokensUsed,
           processingTime,
           cost,
@@ -119,7 +119,7 @@ export class GeminiModelAdapter extends BaseModelAdapter {
         success: false,
         output: null,
         metadata: {
-          modelUsed: this.config.model || 'gemini-2.0-flash',
+          modelUsed: this.config.model || 'gemini-3.7-flash',
           processingTime,
           error: error instanceof Error ? error.message : 'Unknown error',
         },
@@ -153,17 +153,17 @@ export class GeminiModelAdapter extends BaseModelAdapter {
 
   /**
    * Calculate cost for Gemini API usage
-   * Based on Gemini 2.0 Flash pricing
-   * Input: $0.075 per million tokens (up to 128k context)
-   * Output: $0.30 per million tokens
+   * Based on Gemini 3.7 Flash intro pricing (through 2026-12-31)
+   * Input: $0.75 per million tokens
+   * Output: $3.75 per million tokens
    */
   protected calculateCost(tokensUsed: number): number {
     // Rough estimate: assume 50/50 split between input and output
     const inputTokens = Math.floor(tokensUsed * 0.5)
     const outputTokens = Math.ceil(tokensUsed * 0.5)
 
-    const inputCost = (inputTokens / 1_000_000) * 0.075
-    const outputCost = (outputTokens / 1_000_000) * 0.3
+    const inputCost = (inputTokens / 1_000_000) * 0.75
+    const outputCost = (outputTokens / 1_000_000) * 3.75
 
     return inputCost + outputCost
   }

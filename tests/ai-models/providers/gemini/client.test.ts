@@ -335,7 +335,7 @@ describe('GeminiAPIClient', () => {
 			]
 
 			await expect(client.generateContent(messages)).rejects.toThrow(
-				'Gemini API error (401): Invalid API key'
+				'Gemini API error (401) Invalid API key'
 			)
 		})
 
@@ -354,7 +354,7 @@ describe('GeminiAPIClient', () => {
 			]
 
 			await expect(client.generateContent(messages)).rejects.toThrow(
-				'Gemini API error (500): Internal server error'
+				'AI provider internal error — please retry. Internal server error'
 			)
 		})
 
@@ -375,7 +375,7 @@ describe('GeminiAPIClient', () => {
 			]
 
 			await expect(client.generateContent(messages)).rejects.toThrow(
-				/Gemini API error \(500\):.*\.\.\./
+				/AI provider internal error — please retry\..*\.\.\./
 			)
 		})
 

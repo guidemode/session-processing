@@ -71,7 +71,7 @@ export class OpenAIAPIClient {
   constructor(config: OpenAIClientConfig) {
     this.apiKey = config.apiKey
     if (config.baseUrl) this.baseUrl = config.baseUrl
-    this.defaultModel = config.model || 'gpt-4o-mini'
+    this.defaultModel = config.model || 'gpt-5.4-mini'
     this.defaultMaxTokens = config.maxTokens || 4096
     this.defaultTemperature = config.temperature ?? 1.0
     this.timeout = config.timeout || 60000 // 60 seconds

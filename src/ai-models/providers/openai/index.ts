@@ -24,7 +24,7 @@ export class OpenAIModelAdapter extends BaseModelAdapter {
 
     this.client = new OpenAIAPIClient({
       apiKey: config.apiKey,
-      model: config.model || 'gpt-4o-mini',
+      model: config.model || 'gpt-5.4-mini',
       maxTokens: config.maxTokens || 4096,
       temperature: config.temperature ?? 1.0,
       timeout: config.timeout,
@@ -103,7 +103,7 @@ export class OpenAIModelAdapter extends BaseModelAdapter {
         success: true,
         output,
         metadata: {
-          modelUsed: this.config.model || 'gpt-4o-mini',
+          modelUsed: this.config.model || 'gpt-5.4-mini',
           tokensUsed,
           processingTime,
           cost,
@@ -119,7 +119,7 @@ export class OpenAIModelAdapter extends BaseModelAdapter {
         success: false,
         output: null,
         metadata: {
-          modelUsed: this.config.model || 'gpt-4o-mini',
+          modelUsed: this.config.model || 'gpt-5.4-mini',
           processingTime,
           error: error instanceof Error ? error.message : 'Unknown error',
         },
