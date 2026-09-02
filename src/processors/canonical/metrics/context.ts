@@ -17,7 +17,20 @@ export class CanonicalContextProcessor extends BaseMetricProcessor {
   readonly description =
     'Tracks token usage, cache efficiency, and context management (unified for all providers)'
 
-  // Claude Sonnet 4.5 context window (providers may vary)
+  /**
+   * PROVISIONAL default, corrected downstream. Not the authoritative window.
+   *
+   * The real window is a per-model fact, and this package has no way to look one
+   * up: it runs identically in the desktop app and in a Worker, with no database
+   * and no price table. So it assumes the common 200k case, and the server's
+   * pricing pass overwrites `context_window_size` and
+   * `context_utilization_percent` with the model's actual `max_input_tokens`
+   * from `token_prices` (see `services/token-pricing/price-session.ts`).
+   *
+   * That correction matters: a 1m-context session measured against 200k reports
+   * utilisation up to five times too high, which is precisely the session where
+   * anyone would be looking at the number.
+   */
   private readonly CONTEXT_WINDOW_SIZE = 200000
 
   /**
