@@ -9,6 +9,7 @@
 import type { ContextManagementMetrics } from '@guidemode/types'
 import type { ParsedSession } from '../../../parsers/base/types.js'
 import { BaseMetricProcessor } from '../../base/metric-processor.js'
+import { attributeTokens } from './token-attribution.js'
 
 export class CanonicalContextProcessor extends BaseMetricProcessor {
   readonly name = 'canonical-context'
@@ -62,10 +63,11 @@ export class CanonicalContextProcessor extends BaseMetricProcessor {
    * Calculate token totals from the session
    */
   private calculateTotals(session: ParsedSession) {
-    let totalInputTokens = 0
-    let totalOutputTokens = 0
-    let totalCacheCreated = 0
-    let totalCacheRead = 0
+    // Token sums come from the shared attribution pass, which counts each API request
+    // once. Summing per message double-counts heavily: Claude Code repeats the same
+    // usage block on every line of a response (measured at 64.8% inflation).
+    const attribution = attributeTokens(session)
+
     let contextLength = 0
     let mostRecentTimestamp: Date | null = null
     let mostRecentUsage: {
@@ -86,13 +88,9 @@ export class CanonicalContextProcessor extends BaseMetricProcessor {
         | undefined
 
       if (usage) {
-        // Sum all tokens
-        totalInputTokens += usage.input_tokens || 0
-        totalOutputTokens += usage.output_tokens || 0
-        totalCacheCreated += usage.cache_creation_input_tokens || 0
-        totalCacheRead += usage.cache_read_input_tokens || 0
-
-        // Track most recent main chain message for context_length
+        // Track most recent main chain message for context_length. This deliberately
+        // stays per-message: context length is a point-in-time reading of the newest
+        // message's window, not a sum, so request de-duplication does not apply.
         const isSidechain = message.metadata?.isSidechain === true
         if (
           !isSidechain &&
@@ -114,10 +112,10 @@ export class CanonicalContextProcessor extends BaseMetricProcessor {
     }
 
     return {
-      totalInputTokens,
-      totalOutputTokens,
-      totalCacheCreated,
-      totalCacheRead,
+      totalInputTokens: attribution.totals.inputTokens,
+      totalOutputTokens: attribution.totals.outputTokens,
+      totalCacheCreated: attribution.totals.cacheCreationTokens,
+      totalCacheRead: attribution.totals.cacheReadTokens,
       contextLength,
     }
   }

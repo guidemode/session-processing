@@ -7,6 +7,7 @@
 
 import type {
   ContentBlock,
+  ProviderSessionTotals,
   StructuredMessageContent,
   TextContent,
   ToolResultContent,
@@ -110,6 +111,12 @@ export interface ParsedSession {
     lineCount: number
     [key: string]: unknown
   }
+  /**
+   * Summary record the provider wrote into the transcript (Claude's cost-state, Codex's
+   * cumulative token usage). Not a message, so it is attached here rather than parsed
+   * into `messages`. Undefined for providers that write none.
+   */
+  providerTotals?: ProviderSessionTotals
 }
 
 /**

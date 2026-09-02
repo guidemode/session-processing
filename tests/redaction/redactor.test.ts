@@ -375,3 +375,42 @@ describe('replaceHomeDir', () => {
 		expect(result).toBe('/Users/clifton/foo')
 	})
 })
+
+describe('redaction preserves provider summary records', () => {
+  // The CLI redacts before uploading, so anything redaction mangles never reaches the
+  // server. cost-state is valid JSON with no uuid/message, so it does NOT take the
+  // malformed-line passthrough - it goes through the normal redaction path.
+  const COST_STATE = JSON.stringify({
+    type: 'cost-state',
+    sessionId: 'sess-1',
+    totalCostUSD: 11.97120275,
+    totalAPIDuration: 708903,
+    totalLinesAdded: 1733,
+    modelUsage: {
+      'claude-opus-5[1m]': {
+        inputTokens: 824,
+        outputTokens: 42225,
+        cacheReadInputTokens: 12069605,
+        cacheCreationInputTokens: 139372,
+        costUSD: 9.77191875,
+      },
+    },
+    hasUnknownModelCost: false,
+  })
+
+  it('keeps the cost-state line parseable with its figures intact', () => {
+    const input = `{"type":"assistant","uuid":"u1","message":{"role":"assistant"}}\n${COST_STATE}`
+    const { content } = redactJsonlContent(input)
+
+    const lines = content.split('\n').filter(l => l.trim())
+    expect(lines).toHaveLength(2)
+
+    const parsed = JSON.parse(lines[1])
+    expect(parsed.type).toBe('cost-state')
+    expect(parsed.totalCostUSD).toBe(11.97120275)
+    expect(parsed.hasUnknownModelCost).toBe(false)
+    // The context-tier suffix must survive verbatim - it changes the rate.
+    expect(parsed.modelUsage['claude-opus-5[1m]'].costUSD).toBe(9.77191875)
+    expect(parsed.modelUsage['claude-opus-5[1m]'].cacheReadInputTokens).toBe(12069605)
+  })
+})

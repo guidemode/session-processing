@@ -114,10 +114,10 @@ describe('CanonicalSessionProcessor', () => {
   })
 
   describe('getMetricProcessors', () => {
-    it('should return all 6 metric processors', () => {
+    it('should return all 7 metric processors', () => {
       const metricProcessors = processor.getMetricProcessors()
 
-      expect(metricProcessors.length).toBe(6)
+      expect(metricProcessors.length).toBe(7)
 
       const metricTypes = metricProcessors.map(p => p.metricType)
       expect(metricTypes).toContain('performance')
@@ -126,6 +126,7 @@ describe('CanonicalSessionProcessor', () => {
       expect(metricTypes).toContain('usage')
       expect(metricTypes).toContain('error')
       expect(metricTypes).toContain('context-management')
+      expect(metricTypes).toContain('token-cost')
     })
 
     it('should run all metric processors', async () => {

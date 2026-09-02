@@ -5,9 +5,11 @@
  * Consolidates 5+ provider-specific processors into one.
  */
 
+import { extractProviderSessionTotals } from '../../extractors/index.js'
 import { CanonicalParser } from '../../parsers/index.js'
 import { type BaseMetricProcessor, BaseProviderProcessor } from '../base/index.js'
 import { CanonicalContextProcessor } from './metrics/context.js'
+import { CanonicalCostProcessor } from './metrics/cost.js'
 import { CanonicalEngagementProcessor } from './metrics/engagement.js'
 import { CanonicalErrorProcessor } from './metrics/error.js'
 import { CanonicalPerformanceProcessor } from './metrics/performance.js'
@@ -32,12 +34,20 @@ export class CanonicalSessionProcessor extends BaseProviderProcessor {
       new CanonicalUsageProcessor(),
       new CanonicalErrorProcessor(),
       new CanonicalContextProcessor(),
+      new CanonicalCostProcessor(),
     ]
   }
 
-  parseSession(jsonlContent: string, _provider: string) {
+  parseSession(jsonlContent: string, provider: string) {
     this.validateJsonlContent(jsonlContent)
-    return this.parser.parseSession(jsonlContent)
+    const session = this.parser.parseSession(jsonlContent)
+
+    // The only seam holding both the raw transcript and the provider name. Provider
+    // summary records (Claude's cost-state, Codex's cumulative usage) carry no uuid or
+    // timestamp, so the message parser skips them - they can only be read from here.
+    session.providerTotals = extractProviderSessionTotals(jsonlContent, provider) ?? undefined
+
+    return session
   }
 
   getMetricProcessors(): BaseMetricProcessor[] {
@@ -53,4 +63,5 @@ export {
   CanonicalPerformanceProcessor,
   CanonicalErrorProcessor,
   CanonicalContextProcessor,
+  CanonicalCostProcessor,
 }
