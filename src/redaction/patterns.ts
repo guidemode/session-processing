@@ -1,4 +1,4 @@
-import patternsJson from './patterns.json'
+import { patternsData } from './patterns.generated.js'
 
 export interface RedactionPattern {
   name: string
@@ -9,4 +9,9 @@ export interface RedactionPattern {
   replacement: string | null
 }
 
-export const patterns: RedactionPattern[] = patternsJson as RedactionPattern[]
+/**
+ * Sourced from patterns.json via a generated module rather than a direct JSON import: Node's ESM
+ * loader needs an import attribute that the CommonJS build refuses to compile. Run
+ * `pnpm generate:patterns` after editing patterns.json.
+ */
+export const patterns: RedactionPattern[] = patternsData

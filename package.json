@@ -1,6 +1,6 @@
 {
   "name": "@guidemode/session-processing",
-  "version": "0.2.7",
+  "version": "0.2.8",
   "description": "Shared session processing, metrics calculation, AI processing, and UI components for GuideMode",
   "type": "module",
   "main": "./dist/cjs/index.js",
@@ -53,7 +53,8 @@
     "index.css"
   ],
   "scripts": {
-    "build": "pnpm run clean && pnpm run build:esm && pnpm run build:cjs && pnpm run build:cjs-package",
+    "build": "pnpm run clean && pnpm run generate:patterns && pnpm run build:esm && pnpm run build:cjs && pnpm run build:cjs-package",
+    "generate:patterns": "node scripts/generate-patterns.mjs",
     "build:esm": "tsc -p tsconfig.json",
     "build:cjs": "tsc -p tsconfig.cjs.json",
     "build:cjs-package": "echo '{\"type\":\"commonjs\"}' > dist/cjs/package.json",
