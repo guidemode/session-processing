@@ -38,6 +38,7 @@ export class CanonicalCostProcessor extends BaseMetricProcessor {
         input_tokens: m.inputTokens,
         output_tokens: m.outputTokens,
         cache_creation_tokens: m.cacheCreationTokens,
+        cache_creation_1h_tokens: m.cacheCreation1hTokens,
         cache_read_tokens: m.cacheReadTokens,
         reasoning_tokens: m.reasoningTokens,
         web_search_requests: reported?.webSearchRequests,

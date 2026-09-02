@@ -12,6 +12,22 @@
  * output_tokens by 64.8% (487,244 vs 171,655).
  *
  * Deduplicating on `requestId` is what makes these numbers real.
+ *
+ * The second rule concerns the CACHE TTL SPLIT. Anthropic bills a 1-hour cache write at
+ * a higher rate than the 5-minute default, and only the per-message `usage.cache_creation`
+ * object carries that breakdown — the provider's own summary record does not. So when the
+ * summary is authoritative (it is, for Claude) the TTL split still has to come from the
+ * messages, and the two sources do not always cover the same requests: on a resumed or
+ * compacted session the summary bills tokens whose messages are in a different file
+ * entirely. Measured across 15 real sessions, message-visible cache-creation tokens
+ * ranged from 7% to 485% of the summary's figure for the same model.
+ *
+ * That is why the observed 1-hour count is CAPPED at the authoritative total and never
+ * extrapolated from it. Extrapolating the observed ratio looked more accurate on average
+ * (-7.7% -> +5.0% against Anthropic's own figures) but over-stated 8 of 15 sessions by up
+ * to 8%, with nothing stored to say which. Capping is exact wherever the two sources
+ * reconcile, strictly better than ignoring the split on every session measured, and its
+ * error is one-sided: the derived cost is a floor, never an over-charge.
  */
 
 import type { ParsedMessage, ParsedSession } from '../../../parsers/base/types.js'
@@ -21,6 +37,11 @@ interface RawUsage {
   input_tokens?: number
   output_tokens?: number
   cache_creation_input_tokens?: number
+  /** TTL breakdown of the line above. Anthropic bills 1-hour writes at a higher rate. */
+  cache_creation?: {
+    ephemeral_1h_input_tokens?: number
+    ephemeral_5m_input_tokens?: number
+  }
   cache_read_input_tokens?: number
   output_tokens_details?: { reasoning_tokens?: number }
   reasoning_output_tokens?: number
@@ -32,6 +53,14 @@ export interface ModelTokenUsage {
   inputTokens: number
   outputTokens: number
   cacheCreationTokens: number
+  /**
+   * Portion of `cacheCreationTokens` written with a 1-hour TTL, which Anthropic bills
+   * at a higher rate than the 5-minute default ($10/Mtok against $6.25 for Opus 5).
+   *
+   * ALWAYS <= `cacheCreationTokens`, and deliberately an under-count when the two
+   * sources disagree. See `observed1hByBaseModel`.
+   */
+  cacheCreation1hTokens: number
   cacheReadTokens: number
   reasoningTokens: number
 }
@@ -122,6 +151,91 @@ function summarise(
 }
 
 /**
+ * Base model name, with any context-tier suffix stripped.
+ *
+ * The two sources disagree on naming: a per-message record says `claude-opus-5`, while
+ * the summary record for the same requests says `claude-opus-5[1m]`. Joining on the raw
+ * string would find nothing and silently drop the TTL split, so the join is on the base
+ * name. The suffix itself is preserved everywhere else - it changes the price.
+ */
+function baseModelName(model: string): string {
+  return model.replace(/\[[^\]]*\]$/, '').trim()
+}
+
+/**
+ * Cache-creation tokens with a 1-hour TTL, per base model, from the messages.
+ *
+ * Deduplicated on `requestId` for the same reason everything else here is: one response
+ * repeats its usage block across several lines.
+ */
+function observed1hByBaseModel(session: ParsedSession): Map<string, number> {
+  const byBase = new Map<string, number>()
+  const seenRequests = new Set<string>()
+
+  for (const message of session.messages) {
+    const usage = readUsage(message)
+    if (!usage?.cache_creation) continue
+
+    const key = requestKey(message)
+    if (seenRequests.has(key)) continue
+    seenRequests.add(key)
+
+    const model =
+      typeof message.metadata?.model === 'string' && message.metadata.model.length > 0
+        ? baseModelName(message.metadata.model)
+        : UNKNOWN_MODEL
+
+    const hours = usage.cache_creation.ephemeral_1h_input_tokens || 0
+    if (hours > 0) byBase.set(model, (byBase.get(model) ?? 0) + hours)
+  }
+
+  return byBase
+}
+
+/**
+ * Attach observed 1-hour tokens to models whose totals came from the provider.
+ *
+ * CAPPED, NEVER EXTRAPOLATED. The observed count is whatever the visible messages show;
+ * the authoritative total is the provider's. Where the observed count exceeds the total
+ * - a compacted session whose transcript holds more requests than the summary bills -
+ * it is clamped, so a model can never be charged the higher rate on more tokens than it
+ * wrote. Where it falls short, the shortfall stays at the base cache rate rather than
+ * being scaled up: the unseen requests demonstrably have a different TTL mix (measured
+ * 30%-99% across real sessions), so scaling would over-charge, and an over-charge is the
+ * one error a cost floor must not make.
+ *
+ * When several priced models share a base name - `claude-opus-5` and `claude-opus-5[1m]`
+ * both present - the observed count is allocated between them in proportion to their
+ * cache-creation totals. Giving each the full observed figure would bill the same tokens
+ * at the higher rate twice.
+ */
+function applyObserved1hTokens(models: ModelTokenUsage[], observed: Map<string, number>): void {
+  if (observed.size === 0) return
+
+  const byBase = new Map<string, ModelTokenUsage[]>()
+  for (const model of models) {
+    const base = baseModelName(model.model)
+    const group = byBase.get(base) ?? []
+    group.push(model)
+    byBase.set(base, group)
+  }
+
+  for (const [base, group] of byBase) {
+    const seen = observed.get(base)
+    if (!seen) continue
+
+    const groupTotal = group.reduce((n, m) => n + m.cacheCreationTokens, 0)
+    if (groupTotal <= 0) continue
+
+    const capped = Math.min(seen, groupTotal)
+    for (const model of group) {
+      const share = model.cacheCreationTokens / groupTotal
+      model.cacheCreation1hTokens = Math.round(capped * share)
+    }
+  }
+}
+
+/**
  * Attribute a session's tokens to models, counting each API request exactly once.
  *
  * Prefers the provider's own summary record when it carries a per-model split, since
@@ -136,9 +250,12 @@ export function attributeTokens(session: ParsedSession): TokenAttribution {
       inputTokens: m.inputTokens,
       outputTokens: m.outputTokens,
       cacheCreationTokens: m.cacheCreationTokens,
+      // Filled in below: the summary record carries no TTL breakdown.
+      cacheCreation1hTokens: 0,
       cacheReadTokens: m.cacheReadTokens,
       reasoningTokens: 0,
     }))
+    applyObserved1hTokens(models, observed1hByBaseModel(session))
     return summarise('provider_totals', models, totalsOf(models), 0)
   }
 
@@ -197,6 +314,7 @@ function attributeFromMessages(session: ParsedSession): TokenAttribution {
         inputTokens: 0,
         outputTokens: 0,
         cacheCreationTokens: 0,
+        cacheCreation1hTokens: 0,
         cacheReadTokens: 0,
         reasoningTokens: 0,
       }
@@ -206,12 +324,18 @@ function attributeFromMessages(session: ParsedSession): TokenAttribution {
     const input = usage.input_tokens || 0
     const output = usage.output_tokens || 0
     const cacheCreation = usage.cache_creation_input_tokens || 0
+    // Clamped: a malformed record must not report more 1-hour tokens than were written.
+    const cacheCreation1h = Math.min(
+      usage.cache_creation?.ephemeral_1h_input_tokens || 0,
+      cacheCreation
+    )
     const cacheRead = usage.cache_read_input_tokens || 0
     const reasoning = reasoningTokensOf(usage)
 
     entry.inputTokens += input
     entry.outputTokens += output
     entry.cacheCreationTokens += cacheCreation
+    entry.cacheCreation1hTokens += cacheCreation1h
     entry.cacheReadTokens += cacheRead
     entry.reasoningTokens += reasoning
 
