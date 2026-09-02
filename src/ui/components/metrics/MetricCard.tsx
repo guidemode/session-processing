@@ -24,7 +24,7 @@ interface MetricCardProps {
   value: string | number | boolean | null | undefined | unknown[] | Record<string, unknown>
   unit?: string
   suffix?: string
-  type?: 'number' | 'percentage' | 'duration' | 'array' | 'object' | 'string'
+  type?: 'number' | 'percentage' | 'duration' | 'array' | 'object' | 'string' | 'currency'
   tooltip?: string
   size?: 'sm' | 'md' | 'lg'
   /** Metric identifier for threshold lookup (e.g., 'read-write-ratio', 'response-latency') */
@@ -61,6 +61,17 @@ export function MetricCard({
         return 'N/A'
       case 'string':
         return value.toString()
+      case 'currency':
+        // Four decimals, not two: an API-equivalent cost is routinely a fraction of a
+        // cent per session, and rounding to $0.00 would report a real cost as no cost.
+        return typeof value === 'number'
+          ? value.toLocaleString(undefined, {
+              style: 'currency',
+              currency: 'USD',
+              minimumFractionDigits: 2,
+              maximumFractionDigits: 4,
+            })
+          : 'N/A'
       default:
         return typeof value === 'number' ? value.toLocaleString() : value.toString()
     }

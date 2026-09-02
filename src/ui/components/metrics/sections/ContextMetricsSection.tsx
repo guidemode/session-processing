@@ -57,7 +57,7 @@ export function ContextMetricsSection({ context }: ContextMetricsSectionProps) {
             label="Context Window"
             value={context.contextWindowSize}
             suffix=" tokens"
-            tooltip="Model's maximum context capacity (200K tokens)"
+            tooltip="The model's own maximum context capacity, resolved per model rather than assumed"
           />
           <MetricCard
             label="Context Usage"
@@ -80,6 +80,60 @@ export function ContextMetricsSection({ context }: ContextMetricsSectionProps) {
             tooltip="Average input tokens per message"
           />
         </div>
+
+        {/*
+         * Cost is rendered only when there IS one, rather than as a set of "N/A"
+         * cards. Pricing is server-derived and the desktop app has no price table,
+         * so an always-present cost row would read as a permanent gap there instead
+         * of what it is: a figure that environment does not compute.
+         */}
+        {context.apiEquivalentCostUsd != null && (
+          <>
+            <div className="divider text-sm">Cost</div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
+              <MetricCard
+                label="API-Equivalent Cost"
+                value={Number.parseFloat(context.apiEquivalentCostUsd)}
+                type="currency"
+                tooltip="List-price value of the tokens this session consumed. Not what you were billed - a subscription charges a flat fee regardless."
+              />
+              <MetricCard
+                label="Primary Model"
+                value={context.primaryModel ?? undefined}
+                type="string"
+                tooltip="The model that produced the most output in this session"
+              />
+              <MetricCard
+                label="Models Used"
+                value={context.distinctModelCount}
+                tooltip="Distinct models this session called"
+              />
+              {context.providerReportedCostUsd != null && (
+                <MetricCard
+                  label="Provider Reported"
+                  value={Number.parseFloat(context.providerReportedCostUsd)}
+                  type="currency"
+                  tooltip="The provider's own cost figure, shown as a cross-check against the derived value"
+                />
+              )}
+            </div>
+
+            {/*
+             * A partial cost is a FLOOR, and saying so is the whole reason the flag is
+             * carried through to the UI. The number without this caveat reads as a total.
+             */}
+            {context.costHasUnpricedModels && (
+              <div className="text-xs text-warning">
+                Cost is a floor: no price is held for{' '}
+                {context.costUnpricedModels?.length
+                  ? context.costUnpricedModels.join(', ')
+                  : 'one or more models used here'}
+                .
+              </div>
+            )}
+          </>
+        )}
       </div>
     </MetricSection>
   )

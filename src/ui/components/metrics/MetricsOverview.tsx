@@ -78,6 +78,27 @@ export interface SessionMetricsUI {
     compactEventSteps?: number[] | null
     avgTokensPerMessage?: number | null
     messagesUntilFirstCompact?: number | null
+    /**
+     * API-equivalent cost: the list-price value of the tokens consumed, derived
+     * server-side. NOT what anyone was billed — a Max or Pro subscriber pays a flat
+     * subscription and none of this.
+     *
+     * A `numeric` column, so it arrives as a STRING; parse before formatting.
+     *
+     * ABSENT ON DESKTOP, permanently and by design: pricing needs a price table and
+     * a database the desktop app does not have. Every consumer must treat undefined
+     * as "not priced here" rather than as zero — the tiles below render nothing at
+     * all in that case, which is why desktop shows no cost rather than "$0.00".
+     */
+    apiEquivalentCostUsd?: string | null
+    /** `derived` | `derived_partial` | `unavailable` | `pending`. */
+    costSource?: string | null
+    costHasUnpricedModels?: boolean | null
+    costUnpricedModels?: string[] | null
+    /** The provider's own figure. A cross-check, never the headline. */
+    providerReportedCostUsd?: string | null
+    primaryModel?: string | null
+    distinctModelCount?: number | null
     improvementTips?: string[] | null
   }
 }
