@@ -42,9 +42,11 @@ export class CanonicalSessionProcessor extends BaseProviderProcessor {
     this.validateJsonlContent(jsonlContent)
     const session = this.parser.parseSession(jsonlContent)
 
-    // The only seam holding both the raw transcript and the provider name. Provider
-    // summary records (Claude's cost-state, Codex's cumulative usage) carry no uuid or
-    // timestamp, so the message parser skips them - they can only be read from here.
+    // Provider summary records (Claude's cost-state, Codex's cumulative usage) carry no
+    // uuid or timestamp, so the message parser skips them and they can only be read from
+    // raw content. `BaseProviderProcessor.processMetrics` now does this for EVERY
+    // provider - doing it only here is how the cost pipeline shipped without once
+    // running on the ingest path. Kept so a direct `parseSession` caller still gets it.
     session.providerTotals = extractProviderSessionTotals(jsonlContent, provider) ?? undefined
 
     return session

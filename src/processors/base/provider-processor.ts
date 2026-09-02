@@ -1,3 +1,4 @@
+import { extractProviderSessionTotals } from '../../extractors/index.js'
 import type { BaseMetricProcessor } from './metric-processor.js'
 import type { ParsedSession, ProcessorContext, ProcessorResult } from './types.js'
 
@@ -44,6 +45,17 @@ export abstract class BaseProviderProcessor {
     context: ProcessorContext
   ): Promise<ProcessorResult[]> {
     const session = this.parseSession(jsonlContent, context.provider)
+
+    // The provider's own summary record - Claude's `cost-state`, Codex's cumulative
+    // usage - carries no uuid or timestamp, so the message parser skips it. It can only
+    // be read from raw content, and this is the one seam every provider reaches: each
+    // subclass overrides `parseSession`, but they all arrive here. Attaching it in a
+    // single subclass is how the cost pipeline shipped without ever running.
+    if (!session.providerTotals) {
+      session.providerTotals =
+        extractProviderSessionTotals(jsonlContent, context.provider) ?? undefined
+    }
+
     const processors = this.getMetricProcessors()
 
     // Run all processors sequentially to ensure each completes before the next

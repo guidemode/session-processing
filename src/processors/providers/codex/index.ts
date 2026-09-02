@@ -2,6 +2,7 @@ import { CanonicalParser } from '../../../parsers/index.js'
 import { type BaseMetricProcessor, BaseProviderProcessor } from '../../base/index.js'
 import {
   CanonicalContextProcessor,
+  CanonicalCostProcessor,
   CanonicalEngagementProcessor,
   CanonicalErrorProcessor,
   CanonicalPerformanceProcessor,
@@ -27,6 +28,7 @@ export class CodexProcessor extends BaseProviderProcessor {
       new CanonicalUsageProcessor(),
       new CanonicalErrorProcessor(),
       new CanonicalContextProcessor(),
+      new CanonicalCostProcessor(),
     ]
   }
 

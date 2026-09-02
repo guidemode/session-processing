@@ -7,6 +7,7 @@ import {
 } from '../../base/index.js'
 import {
   CanonicalContextProcessor,
+  CanonicalCostProcessor,
   CanonicalEngagementProcessor,
   CanonicalErrorProcessor,
   CanonicalPerformanceProcessor,
@@ -33,6 +34,7 @@ export class ClaudeCodeProcessor extends BaseProviderProcessor {
       new CanonicalUsageProcessor(),
       new CanonicalErrorProcessor(),
       new CanonicalContextProcessor(),
+      new CanonicalCostProcessor(),
     ]
   }
 
