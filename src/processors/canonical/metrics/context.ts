@@ -9,7 +9,7 @@
 import type { ContextManagementMetrics } from '@guidemode/types'
 import type { ParsedSession } from '../../../parsers/base/types.js'
 import { BaseMetricProcessor } from '../../base/metric-processor.js'
-import { attributeTokens } from './token-attribution.js'
+import { attributeTokens, requestKey } from './token-attribution.js'
 
 export class CanonicalContextProcessor extends BaseMetricProcessor {
   readonly name = 'canonical-context'
@@ -157,27 +157,56 @@ export class CanonicalContextProcessor extends BaseMetricProcessor {
   }
 
   /**
-   * Calculate average input tokens per message
+   * Average NEW tokens a turn adds to the context, per API request.
+   *
+   * Two traps here, both measured on real sessions.
+   *
+   * `input_tokens` ALONE IS NOT THE ANSWER. Under prompt caching it is only the uncached
+   * delta - a handful of tokens once the conversation is warm. The previous version of
+   * this function averaged exactly that and returned the constant `2` on every one of the
+   * twelve sessions it was checked against. A metric that cannot vary carries no
+   * information.
+   *
+   * NEITHER IS THE FULL CONTEXT. Adding `cache_read_input_tokens` gives what the model
+   * SAW, but every request re-sends the whole conversation, so that figure (measured
+   * 121k-313k) is really average window occupancy: it tracks session length, duplicates
+   * `context_length` and `context_utilization_percent`, and answers nothing "per message".
+   *
+   * So: input + cache_creation + output, which is the material this turn actually ADDED,
+   * whether it was written into the cache or generated. Measured 1,587-3,805 - a number
+   * that moves with how verbose turns and tool outputs are.
+   *
+   * Deduplicated on request for the reason `token-attribution.ts` documents at length:
+   * Claude Code repeats one response's usage block across every JSONL line it wrote.
    */
   private calculateAvgTokensPerMessage(session: ParsedSession): number {
-    let totalInputTokens = 0
-    let messageCount = 0
+    const seenRequests = new Set<string>()
+    let totalNewTokens = 0
+    let requestCount = 0
 
     for (const message of session.messages) {
       const usage = message.metadata?.usage as
         | {
             input_tokens?: number
+            output_tokens?: number
+            cache_creation_input_tokens?: number
           }
         | undefined
 
-      const inputTokens = usage?.input_tokens || 0
-      if (inputTokens > 0) {
-        totalInputTokens += inputTokens
-        messageCount++
-      }
+      if (!usage) continue
+
+      const key = requestKey(message)
+      if (seenRequests.has(key)) continue
+      seenRequests.add(key)
+
+      totalNewTokens +=
+        (usage.input_tokens || 0) +
+        (usage.cache_creation_input_tokens || 0) +
+        (usage.output_tokens || 0)
+      requestCount++
     }
 
-    return messageCount > 0 ? Math.round(totalInputTokens / messageCount) : 0
+    return requestCount > 0 ? Math.round(totalNewTokens / requestCount) : 0
   }
 
   /**

@@ -143,12 +143,18 @@ describe('process_quality_score', () => {
   describe('scoring components', () => {
     // Pins the actual weights. Before this, the only assertion was that the property
     // existed, so every weight could change silently.
-    it('awards 30 for plan mode', async () => {
-      expect((await score(['ExitPlanMode'])).process_quality_score).toBe(30)
+    //
+    // Since v3 the score is a PERCENTAGE OF WHAT WAS APPLICABLE, not a flat sum. A session
+    // that never wrote anything cannot demonstrate read-before-write, verification or
+    // incremental work, so those 50 points leave the denominator instead of counting as
+    // failures - which is why the two no-write cases below score higher than their raw
+    // weights.
+    it('awards plan mode 30 of the 50 points a no-write session can earn', async () => {
+      expect((await score(['ExitPlanMode'])).process_quality_score).toBe(60)
     })
 
-    it('awards 20 for todo tracking', async () => {
-      expect((await score(['TodoWrite'])).process_quality_score).toBe(20)
+    it('awards todo tracking 20 of the 50 points a no-write session can earn', async () => {
+      expect((await score(['TodoWrite'])).process_quality_score).toBe(40)
     })
 
     it('awards 25 for reading before writing', async () => {

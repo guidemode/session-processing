@@ -10,6 +10,19 @@ import { isStructuredMessageContent } from '@guidemode/types'
 import type { ParsedMessage, ParsedSession } from '../../../parsers/base/types.js'
 import { BaseMetricProcessor } from '../../base/metric-processor.js'
 
+/**
+ * Text the harness injects into user messages: command wrappers, system reminders,
+ * background-task notifications.
+ *
+ * None of it was typed by the developer, and it badly distorts a clarity score in both
+ * directions. Notifications and command output are dense with file paths and identifiers,
+ * which inflates the score - two real sessions measured 47 and 42, dropping to 9 and 12
+ * once stripped. Caveat banners are prose, which deflates it.
+ */
+const INJECTED_CONTENT =
+  /<(system-reminder|local-command-caveat|local-command-stdout|task-notification|command-name|command-message|command-args)>[\s\S]*?<\/\1>/g
+import { isHumanPrompt } from './message-filters.js'
+
 export class CanonicalUsageProcessor extends BaseMetricProcessor {
   readonly name = 'canonical-usage'
   readonly metricType = 'usage' as const
@@ -18,7 +31,10 @@ export class CanonicalUsageProcessor extends BaseMetricProcessor {
   async process(session: ParsedSession): Promise<UsageMetrics> {
     const toolUses = this.extractToolUses(session)
     const toolResults = this.extractToolResults(session)
-    const userMessages = session.messages.filter(m => m.type === 'user')
+    // Sidechain prompts are machine-written sub-agent instructions, not the developer's
+    // own words, and they are dense with paths and identifiers - counting them would
+    // flatter exactly the sessions that delegate most.
+    const userMessages = session.messages.filter(isHumanPrompt)
 
     // Calculate Read/Write ratio
     const readTools = ['Read', 'Grep', 'Glob', 'BashOutput']
@@ -84,18 +100,28 @@ export class CanonicalUsageProcessor extends BaseMetricProcessor {
   }
 
   /**
-   * Calculate input clarity score based on technical content
+   * Density of concrete, actionable detail in the developer's own messages.
+   *
+   * Scored PER MESSAGE and then averaged. It used to pool - `sum(score) / sum(words)`
+   * across the whole session - which quietly inverted the metric: the marker counts
+   * saturate (`countTechnicalTerms` returns distinct keywords present, so it stops growing
+   * around 70) while the word count does not, so one long message dragged down every short
+   * precise one and writing a thorough prompt LOWERED the score. Measured on real sessions
+   * the pooled form collapsed everything into 3-12%; the per-message mean spreads 0-52%,
+   * which is the range the thresholds in `metricThresholds.ts` were written for.
+   *
+   * Messages with no words are skipped rather than counted as zero.
    */
   private calculateInputClarityScore(userMessages: ParsedMessage[]): number {
     if (userMessages.length === 0) return 0
 
-    let totalScore = 0
-    let totalWords = 0
+    const perMessageScores: number[] = []
 
     for (const message of userMessages) {
-      const content = this.extractTextContent(message)
+      const content = this.extractDeveloperText(message)
       const words = content.split(/\s+/).filter(word => word.length > 0)
-      totalWords += words.length
+      // Nothing left after stripping means the message was pure harness injection.
+      if (words.length === 0) continue
 
       // Count technical indicators
       const technicalTerms = this.countTechnicalTerms(content)
@@ -113,12 +139,23 @@ export class CanonicalUsageProcessor extends BaseMetricProcessor {
         specificityMarkers * 2 +
         atReferences * 2 +
         imageAttachments * 3
-      totalScore += messageScore
+
+      perMessageScores.push(Math.min(Math.round((messageScore / words.length) * 100), 100))
     }
 
-    // Return as percentage
-    const clarityScore = totalWords > 0 ? Math.round((totalScore / totalWords) * 100) : 0
-    return Math.min(clarityScore, 100)
+    if (perMessageScores.length === 0) return 0
+
+    const mean = perMessageScores.reduce((a, b) => a + b, 0) / perMessageScores.length
+    return Math.min(Math.round(mean), 100)
+  }
+
+  /**
+   * The developer's own words, with harness-injected blocks removed.
+   *
+   * Only used for clarity scoring: other metrics want the message as it was stored.
+   */
+  private extractDeveloperText(message: ParsedMessage): string {
+    return this.extractTextContent(message).replace(INJECTED_CONTENT, ' ').trim()
   }
 
   /**

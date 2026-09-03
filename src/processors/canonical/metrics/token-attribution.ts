@@ -112,8 +112,11 @@ function readUsage(message: ParsedMessage): RawUsage | undefined {
  *
  * Falls back to the message id when the provider gives no requestId, which degrades to
  * the old per-message behaviour rather than collapsing unrelated messages together.
+ *
+ * Exported because the context processor needs the SAME notion of "one API request" when
+ * averaging tokens per turn. Two definitions of a request would drift.
  */
-function requestKey(message: ParsedMessage): string {
+export function requestKey(message: ParsedMessage): string {
   const requestId = message.metadata?.requestId
   return typeof requestId === 'string' && requestId.length > 0 ? requestId : message.id
 }

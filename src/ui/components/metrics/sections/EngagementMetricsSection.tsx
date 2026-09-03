@@ -12,7 +12,13 @@ interface EngagementMetricsSectionProps {
 }
 
 export function EngagementMetricsSection({ engagement }: EngagementMetricsSectionProps) {
-  if (!engagement || (!engagement.interruptionRate && !engagement.sessionLengthMinutes)) {
+  // Presence, not truthiness. Zero is now the COMMON value for interruption rate - most
+  // sessions are never interrupted - and a short session rounds to zero minutes, so a
+  // falsy test hid the whole section from exactly the sessions that went well.
+  if (
+    !engagement ||
+    (engagement.interruptionRate == null && engagement.sessionLengthMinutes == null)
+  ) {
     return null
   }
 
@@ -27,7 +33,7 @@ export function EngagementMetricsSection({ engagement }: EngagementMetricsSectio
           <MetricCard
             label="Interruption Rate"
             value={
-              engagement.interruptionRate
+              engagement.interruptionRate != null
                 ? Number.parseFloat(engagement.interruptionRate)
                 : undefined
             }
@@ -44,7 +50,7 @@ export function EngagementMetricsSection({ engagement }: EngagementMetricsSectio
           <MetricCard
             label="Session Length"
             value={
-              engagement.sessionLengthMinutes
+              engagement.sessionLengthMinutes != null
                 ? Number.parseFloat(engagement.sessionLengthMinutes)
                 : undefined
             }

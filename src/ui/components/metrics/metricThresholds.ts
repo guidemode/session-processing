@@ -39,10 +39,19 @@ export const METRIC_THRESHOLDS: Record<string, MetricThreshold> = {
     warning: 5,
     label: 'Lower is better - AI found files efficiently',
   },
+  /**
+   * Calibrated against the measured distribution rather than guessed, which is what the
+   * two rounds of "lowered from N" before this were. Across 90 real developer sessions
+   * scored by the per-message formula: p25 = 4, median = 9, p90 = 22, max = 40.
+   *
+   * Green therefore sits at roughly the top decile and yellow at about the median. The
+   * previous 40/20 pair put green at the single best session in the corpus - a band nobody
+   * could reach is not a target, it is a permanent red mark.
+   */
   'input-clarity-score': {
     direction: 'higher-is-better',
-    excellent: 40, // Lowered from 80 - more realistic
-    warning: 20, // Lowered from 60
+    excellent: 20,
+    warning: 8,
     label: 'Technical detail and specificity in requests',
   },
 

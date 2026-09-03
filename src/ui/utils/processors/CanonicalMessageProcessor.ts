@@ -20,6 +20,7 @@ import {
   ListBulletIcon,
   MapIcon,
 } from '@heroicons/react/24/outline'
+import { getToolCapability } from '../../../processors/canonical/metrics/tool-capabilities.js'
 import type { BaseSessionMessage } from '../sessionTypes.js'
 import { type ContentBlock, createContentBlock, createDisplayMetadata } from '../timelineTypes.js'
 import { BaseMessageProcessor, type ContentPart } from './BaseMessageProcessor.js'
@@ -111,7 +112,10 @@ export class CanonicalMessageProcessor extends BaseMessageProcessor {
         })
       }
 
-      if (toolName === 'TodoWrite') {
+      // Capability-based rather than a literal name: the task-list tool has been
+      // `TodoWrite`, then `TaskCreate`/`TaskUpdate`, and matching one spelling meant the
+      // transcript silently stopped rendering these blocks when the name changed.
+      if (toolName && getToolCapability(toolName) === 'todo') {
         return createDisplayMetadata({
           icon: 'TODO',
           IconComponent: ListBulletIcon,

@@ -71,11 +71,25 @@ const EXACT: Record<string, ToolCapability> = {
   plan: 'plan',
 
   // --- todo tracking ---
+  //
+  // The names churn. Measured across 913 local Claude Code sessions: `TodoWrite` was
+  // already gone, `TaskCreate`/`TaskUpdate` ran from 2.1.220 to 2.1.227 (491 and 867
+  // calls), and 2.1.232 onward emits no task-list tool at all.
+  //
+  // `taskcreate` MUST be listed here rather than left to the substring rules: it contains
+  // "create", so it used to fall through to `['create', 'write']` and be counted as a
+  // WRITE, inflating read/write ratio and the incremental-approach band across every
+  // session in that era. `taskupdate` matched no rule and was dropped entirely.
+  //
+  // `taskstop` and `taskoutput` are deliberately absent - they control background
+  // subagents (opaque `task_id` like "bluvcpr3d"), not task lists.
   todowrite: 'todo',
   todoread: 'todo',
   todo: 'todo',
   managetodolist: 'todo',
   updatetodos: 'todo',
+  taskcreate: 'todo',
+  taskupdate: 'todo',
 }
 
 /**
