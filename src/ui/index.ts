@@ -35,3 +35,6 @@ export {
 
 // Export message processors
 export * from './utils/processors/index.js'
+
+// Export the condensed transcript model (spans)
+export * from './utils/transcript/index.js'

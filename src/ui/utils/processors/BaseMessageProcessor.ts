@@ -7,6 +7,7 @@
 
 import { isStructuredMessageContent } from '@guidemode/types'
 import {
+  ArrowsPointingInIcon,
   CheckCircleIcon,
   CommandLineIcon,
   CpuChipIcon,
@@ -77,6 +78,16 @@ export abstract class BaseMessageProcessor {
         provider: this.name,
       },
     }
+  }
+
+  /**
+   * Normalize every message without pairing tool calls to their results.
+   *
+   * The condensed transcript derives its own spans, but still wants the
+   * provider-specific display metadata and content blocks that normalization adds.
+   */
+  normalizeAll(messages: BaseSessionMessage[]): TimelineMessage[] {
+    return messages.map(msg => this.normalizeMessage(msg))
   }
 
   /**
@@ -254,6 +265,15 @@ export abstract class BaseMessageProcessor {
           iconColor: 'text-error',
           title: 'Interrupted',
           borderColor: 'border-l-error',
+        })
+
+      case 'compact':
+        return createDisplayMetadata({
+          icon: 'CMP',
+          IconComponent: ArrowsPointingInIcon,
+          iconColor: 'text-warning',
+          title: 'Context compacted',
+          borderColor: 'border-l-warning',
         })
 
       case 'meta':

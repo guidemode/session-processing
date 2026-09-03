@@ -1,3 +1,6 @@
+// Condensed transcript (spans)
+export * from './transcript/index.js'
+
 /**
  * UI Components - Session Processing Components
  *
@@ -11,7 +14,6 @@ export {
   TimelineGroup,
   MessageHeader,
   ContentRenderer,
-  VirtualizedMessageList,
   TextBlock,
   CodeBlock,
   ImageBlock,

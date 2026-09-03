@@ -1,0 +1,3 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`deriveSpans over a real session > is stable — the span shape is a snapshot 1`] = `"human assistant tools:5 assistant tools:2 assistant tools:1 assistant tools:3 assistant human assistant tools:3 assistant tools:2 assistant tools:2 event"`;

@@ -127,6 +127,10 @@ export interface TimelineMessage {
 
 /**
  * Grouped timeline messages (e.g., tool use + result displayed side-by-side)
+ *
+ * @deprecated The condensed transcript derives its own spans (see `utils/transcript`)
+ * and never produces groups. Still used by the desktop ActiveSessionCard; scheduled for
+ * removal once that migrates.
  */
 export interface TimelineGroup {
   id: string
@@ -156,6 +160,7 @@ export interface ProcessedTimeline {
 /**
  * Type guards
  */
+/** @deprecated See `TimelineGroup`. */
 export function isTimelineGroup(item: TimelineItem): item is TimelineGroup {
   return item.displayType === 'group'
 }
