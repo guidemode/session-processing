@@ -73,7 +73,8 @@
     "@anthropic-ai/sdk": "^0.74.0",
     "@google/generative-ai": "^0.21.0",
     "@guidemode/types": "workspace:*",
-    "canvas-confetti": "^1.9.4"
+    "canvas-confetti": "^1.9.4",
+    "zod": "^3.25.76"
   },
   "peerDependencies": {
     "@heroicons/react": "^2.0.0",

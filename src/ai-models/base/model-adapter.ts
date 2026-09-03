@@ -90,14 +90,19 @@ export abstract class BaseModelAdapter {
     template: string,
     variables: Record<string, string | number | boolean | null | undefined>
   ): string {
-    let formatted = template
-
-    for (const [key, value] of Object.entries(variables)) {
-      const placeholder = `{{${key}}}`
-      formatted = formatted.replace(new RegExp(placeholder, 'g'), String(value ?? ''))
-    }
-
-    return formatted
+    // Single pass with a replacer function. Two reasons this must not be a loop of
+    // string replacements:
+    //   1. A string replacement interprets $&, $`, $' and $1 in the REPLACEMENT, so any
+    //      of those sequences appearing in injected session content would corrupt the
+    //      prompt. A replacer function is taken literally.
+    //   2. Substituting keys one at a time lets a {{token}} inside already-injected
+    //      content be clobbered by a later key.
+    return template.replace(/\{\{(\w+)\}\}/g, (match, key: string) => {
+      if (!Object.hasOwn(variables, key)) {
+        return match
+      }
+      return String(variables[key] ?? '')
+    })
   }
 
   /**

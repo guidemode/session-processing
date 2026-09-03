@@ -104,12 +104,9 @@ export function extractAllSystemReminders(content: string): ParsedSystemReminder
   return reminders
 }
 
-/**
- * Strip system-reminder tags from content (useful for displaying clean tool results)
- */
-export function stripSystemReminders(content: string): string {
-  return content.replace(/<system-reminder>[\s\S]*?<\/system-reminder>/gi, '').trim()
-}
+// `stripSystemReminders` now lives in utils/ so the AI model tasks can share it
+// without importing from the UI layer. Re-exported here for existing UI consumers.
+export { stripSystemReminders } from '../../utils/system-reminders.js'
 
 /**
  * Get a summary of what's in a system reminder

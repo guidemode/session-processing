@@ -9,6 +9,20 @@ import type { QualityMetrics, ToolResultContent, ToolUseContent } from '@guidemo
 import { isStructuredMessageContent } from '@guidemode/types'
 import type { ParsedMessage, ParsedSession } from '../../../parsers/base/types.js'
 import { BaseMetricProcessor } from '../../base/metric-processor.js'
+import { countByCapability, getToolCapability } from './tool-capabilities.js'
+
+/**
+ * Version of the deterministic process-quality scorer.
+ *
+ * Stamped onto every result. Scores from different versions are not comparable, so
+ * anything trending this metric should group by it - notably the composite index, whose
+ * `aiLeverage` dimension averages this score over a 30-day window and will therefore mix
+ * v1 and v2 during the transition.
+ *
+ * v1 - literal Claude Code tool names; every other provider scored near zero.
+ * v2 - provider-agnostic capability mapping (see `tool-capabilities.ts`).
+ */
+export const PROCESS_QUALITY_SCORER_VERSION = 'v2'
 
 export class CanonicalQualityProcessor extends BaseMetricProcessor {
   readonly name = 'canonical-quality'
@@ -58,6 +72,7 @@ export class CanonicalQualityProcessor extends BaseMetricProcessor {
         exit_plan_mode_count: planModeUsage.count,
         todo_write_count: todoTrackingUsage.count,
         over_top_affirmations_phrases: overTopAffirmations.phrases,
+        process_quality_scorer_version: PROCESS_QUALITY_SCORER_VERSION,
         improvement_tips: this.generateImprovementTips(
           taskSuccessRate,
           iterationCount,
@@ -154,10 +169,10 @@ export class CanonicalQualityProcessor extends BaseMetricProcessor {
    * Detect plan mode usage
    */
   private detectPlanModeUsage(toolUses: ToolUseContent[]): { used: boolean; count: number } {
-    const exitPlanModeTools = toolUses.filter(tool => tool.name === 'ExitPlanMode')
+    const planTools = toolUses.filter(tool => getToolCapability(tool.name) === 'plan')
     return {
-      used: exitPlanModeTools.length > 0,
-      count: exitPlanModeTools.length,
+      used: planTools.length > 0,
+      count: planTools.length,
     }
   }
 
@@ -165,10 +180,10 @@ export class CanonicalQualityProcessor extends BaseMetricProcessor {
    * Detect todo tracking usage
    */
   private detectTodoTrackingUsage(toolUses: ToolUseContent[]): { used: boolean; count: number } {
-    const todoWriteTools = toolUses.filter(tool => tool.name === 'TodoWrite')
+    const todoTools = toolUses.filter(tool => getToolCapability(tool.name) === 'todo')
     return {
-      used: todoWriteTools.length > 0,
-      count: todoWriteTools.length,
+      used: todoTools.length > 0,
+      count: todoTools.length,
     }
   }
 
@@ -194,32 +209,26 @@ export class CanonicalQualityProcessor extends BaseMetricProcessor {
       score += 20
     }
 
+    // Capability-based, so the same behaviour scores the same on every provider.
+    const counts = countByCapability(toolUses.map(tool => tool.name))
+
     // Read before write pattern
-    const readTools = ['Read', 'Grep', 'Glob']
-    const writeTools = ['Write', 'Edit']
-
-    const reads = toolUses.filter(tool => readTools.includes(tool.name))
-    const writes = toolUses.filter(tool => writeTools.includes(tool.name))
-
-    if (reads.length > 0 && writes.length > 0) {
+    if (counts.read > 0 && counts.write > 0) {
       score += 25
     }
 
     // Testing/checking patterns
-    const testingTools = ['Bash', 'BashOutput']
-    const testing = toolUses.filter(tool => testingTools.includes(tool.name))
-
-    if (testing.length > 0 && writes.length > 0) {
+    if (counts.execute > 0 && counts.write > 0) {
       score += 15
     }
 
     // Incremental approach
-    if (writes.length > 1 && writes.length <= 5) {
+    if (counts.write > 1 && counts.write <= 5) {
       score += 10
     }
 
     // Penalize excessive searching
-    const searchRatio = reads.length / (writes.length || 1)
+    const searchRatio = counts.read / (counts.write || 1)
     if (searchRatio > 2) {
       score -= 10
     }

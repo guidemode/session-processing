@@ -93,11 +93,26 @@ export const METRIC_THRESHOLDS: Record<string, MetricThreshold> = {
     warning: 60,
     label: 'Percentage of successful operations',
   },
+  /**
+   * Deterministic scorer (`session_metrics.process_quality_score`) - a checklist of
+   * process practices. Distinct from `ai-model-quality-score` below; the two measure
+   * different things and deliberately do not share bands.
+   */
   'process-quality-score': {
     direction: 'higher-is-better',
     excellent: 70, // Lowered from 80
     warning: 50, // Lowered from 60
     label: 'Good practices: plan mode, testing, incremental approach',
+  },
+  /**
+   * LLM assessment (`agent_sessions.ai_model_quality_score`) - how well the person set
+   * the AI up to succeed. Bands match the rubric anchors in the scoring prompt.
+   */
+  'ai-model-quality-score': {
+    direction: 'higher-is-better',
+    excellent: 80,
+    warning: 60,
+    label: 'How well the session was set up: context, clarity, steering, process',
   },
   'iteration-count': {
     direction: 'lower-is-better',

@@ -1,3 +1,4 @@
+import type { ProcessorResult } from '@guidemode/types'
 import type { ParsedSession } from '../../processors/base/types.js'
 
 /**
@@ -59,6 +60,17 @@ export interface ModelTaskContext {
     username?: string | null
     email?: string | null
   }
+  /**
+   * Metrics already computed for this session, passed through so tasks can reuse real
+   * numbers instead of re-deriving them badly.
+   *
+   * `prepareInput` is synchronous while the metric processors are async, so a task cannot
+   * compute these itself. Both callers already run the processors before the AI stage
+   * (server: `processMetrics` precedes the AI block; desktop: `processMetrics` runs in
+   * the same handler), making this a pass-through rather than extra work. Optional:
+   * tasks fall back to signals derived from the transcript when it is absent.
+   */
+  metrics?: ProcessorResult[]
 }
 
 /**

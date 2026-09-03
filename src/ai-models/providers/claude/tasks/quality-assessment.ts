@@ -1,29 +1,69 @@
-import type { ContentBlock, ToolUseContent } from '@guidemode/types'
-import { isStructuredMessageContent } from '@guidemode/types'
-import { getUserDisplayName } from '../../../../utils/user.js'
+import { z } from 'zod'
 import { BaseModelTask } from '../../../base/model-task.js'
 import type { ModelTaskConfig, ModelTaskContext } from '../../../base/types.js'
+import { buildTaskInput, formatToolUsage, readNumericMetric } from '../../../condense/index.js'
+
+/**
+ * Version of the scoring prompt and rubric.
+ *
+ * Stamped onto every result. Scores produced by different versions are not comparable, so
+ * anything that aggregates or trends this score must group by it. Bump on any change to
+ * the rubric, the bands, or the inputs the model sees.
+ *
+ * v1 - six aggregate scalars, no transcript, no rubric anchors.
+ * v2 - condensed transcript, anchored bands, per-dimension sub-scores.
+ */
+export const QUALITY_SCORER_VERSION = 'v2'
 
 export interface QualityAssessmentInput {
   userName: string
   provider: string
-  durationMinutes: number
+  durationMinutes: number | string
   messageCount: number
+  userTurnCount: number
   interruptionCount: number
   toolCount: number
+  toolsUsed: string
   errorCount: number
+  transcript: string
+}
+
+export interface QualityDimensionScores {
+  contextQuality: number
+  promptClarity: number
+  steeringEffectiveness: number
+  processDiscipline: number
 }
 
 export interface QualityAssessmentOutput {
   score: number
+  dimensions: QualityDimensionScores
   reasoning: string
   strengths: string[]
   improvements: string[]
+  scorerVersion: string
 }
+
+const dimensionsSchema = z.object({
+  contextQuality: z.number().min(0).max(100),
+  promptClarity: z.number().min(0).max(100),
+  steeringEffectiveness: z.number().min(0).max(100),
+  processDiscipline: z.number().min(0).max(100),
+})
+
+const outputSchema = z.object({
+  score: z.number().min(0).max(100),
+  dimensions: dimensionsSchema,
+  reasoning: z.string().default(''),
+  strengths: z.array(z.string()).default([]),
+  improvements: z.array(z.string()).default([]),
+})
 
 /**
  * Quality Assessment Task
- * Evaluates the quality and completeness of an agent session
+ *
+ * Evaluates how well the person set the AI up to succeed. Deliberately scores the
+ * person's inputs (context, clarity, steering, process), not the AI's output quality.
  */
 export class QualityAssessmentTask extends BaseModelTask<
   QualityAssessmentInput,
@@ -36,31 +76,55 @@ export class QualityAssessmentTask extends BaseModelTask<
   getConfig(): ModelTaskConfig {
     return {
       taskType: this.taskType,
-      prompt: `You are evaluating the quality of an AI coding agent session with {{userName}}. Quality is determined by how well {{userName}} set up the AI for success through effective collaboration practices. Provide a score from 0-100:
+      prompt: `You are evaluating how effectively {{userName}} collaborated with an AI coding agent. Score what {{userName}} controlled - the context and direction they gave - NOT how well the AI performed or whether the task was inherently hard.
 
 Session Details:
 - Provider: {{provider}}
 - Duration: {{durationMinutes}} minutes
-- Message Count: {{messageCount}}
-- User Interruptions: {{interruptionCount}}
-- Tools Used: {{toolCount}}
-- Errors: {{errorCount}}
+- Total Messages: {{messageCount}}
+- Messages written by {{userName}}: {{userTurnCount}}
+- Interruptions/corrections by {{userName}}: {{interruptionCount}}
+- Distinct tools used: {{toolCount}}
+- Tool usage: {{toolsUsed}}
+- Failed operations: {{errorCount}}
 
-Consider these factors (what {{userName}} can control):
-1. Context Quality: Did {{userName}} provide comprehensive upfront context (file paths, technical details, relevant code)?
-2. Prompt Clarity: Were instructions specific, actionable, and technical (not vague)?
-3. Steering Effectiveness: Did {{userName}}'s interruptions/corrections keep the AI on track effectively?
-4. Process Discipline: Did {{userName}} use available tools well (plan mode, todo tracking, iterative refinement)?
-5. Efficiency Indicators: Low error count and read/write ratio suggest {{userName}} provided excellent context and documentation.
+The transcript below is condensed: tool inputs and outputs are replaced by summary markers, but every message {{userName}} wrote is present in full. Step numbers are the original message indices and are therefore not contiguous.
 
-Note: Errors are normal AI exploration - fewer errors indicate better upfront context was provided. Some interruptions show effective steering. Focus on what {{userName}} did to enable AI success.
+Transcript:
+{{transcript}}
+
+Score these four dimensions from 0-100, judging ONLY from evidence visible in the transcript:
+
+1. Context Quality - Did {{userName}} provide file paths, error text, technical detail, constraints and relevant code up front, or did the AI have to discover everything?
+2. Prompt Clarity - Were the instructions specific and actionable, or vague and open to interpretation?
+3. Steering Effectiveness - When {{userName}} intervened, did the correction sharpen direction? Zero interruptions in a session that went well scores high; zero interruptions in a session that drifted scores low.
+4. Process Discipline - Did {{userName}} use plan mode, todo tracking, staged verification, and iterate deliberately rather than in scattershot?
+
+Use these anchors for every dimension and for the overall score:
+- 0-20: Almost no usable signal. One-line vague request, no context, no correction when the work went wrong.
+- 21-40: Minimal. Some intent stated but the AI had to infer most requirements; corrections were vague ("no, fix it").
+- 41-60: Adequate. Clear enough to act on, but missing context that cost avoidable exploration or rework.
+- 61-80: Strong. Specific request with real context (paths, errors, constraints); corrections were targeted and timely.
+- 81-100: Exemplary. Comprehensive up-front context, unambiguous success criteria, deliberate process, precise steering.
+
+Rules:
+- Do not reward or penalise session length, message count or duration on their own.
+- Failed operations are normal AI exploration. Only count them against {{userName}} where the transcript shows the failure was caused by missing or wrong context they supplied.
+- If the transcript is too sparse to judge a dimension, score it 50 and say so in the reasoning.
+- The overall score should be roughly the average of the four dimensions, adjusted for what mattered most in this particular session.
 
 Respond with a JSON object containing:
 {
   "score": <number 0-100>,
-  "reasoning": "<brief explanation focusing on context quality and collaboration practices>",
-  "strengths": ["<what {{userName}} did well to enable AI success>", "<another strength>"],
-  "improvements": ["<how {{userName}} could improve context/prompts>", "<another improvement>"]
+  "dimensions": {
+    "contextQuality": <number 0-100>,
+    "promptClarity": <number 0-100>,
+    "steeringEffectiveness": <number 0-100>,
+    "processDiscipline": <number 0-100>
+  },
+  "reasoning": "<2-3 sentences citing specific evidence from the transcript>",
+  "strengths": ["<what {{userName}} did that enabled the AI>", "<another strength>"],
+  "improvements": ["<a concrete change to context or prompting>", "<another improvement>"]
 }`,
       responseFormat: {
         type: 'json',
@@ -68,11 +132,26 @@ Respond with a JSON object containing:
           type: 'object',
           properties: {
             score: { type: 'number', minimum: 0, maximum: 100 },
+            dimensions: {
+              type: 'object',
+              properties: {
+                contextQuality: { type: 'number', minimum: 0, maximum: 100 },
+                promptClarity: { type: 'number', minimum: 0, maximum: 100 },
+                steeringEffectiveness: { type: 'number', minimum: 0, maximum: 100 },
+                processDiscipline: { type: 'number', minimum: 0, maximum: 100 },
+              },
+              required: [
+                'contextQuality',
+                'promptClarity',
+                'steeringEffectiveness',
+                'processDiscipline',
+              ],
+            },
             reasoning: { type: 'string' },
             strengths: { type: 'array', items: { type: 'string' } },
             improvements: { type: 'array', items: { type: 'string' } },
           },
-          required: ['score', 'reasoning'],
+          required: ['score', 'dimensions', 'reasoning'],
         },
       },
       recordingStrategy: {
@@ -84,83 +163,26 @@ Respond with a JSON object containing:
   }
 
   prepareInput(context: ModelTaskContext): QualityAssessmentInput {
-    const session = context.session
-    if (!session) {
-      throw new Error('Session data is required for quality assessment')
-    }
+    const base = buildTaskInput(context)
+    const { transcript } = base
 
-    // Get user display name
-    const userName = context.user ? getUserDisplayName(context.user) : 'the user'
-
-    // Count interruptions (consecutive user messages)
-    let interruptionCount = 0
-    for (let i = 1; i < session.messages.length; i++) {
-      if (session.messages[i].type === 'user' && session.messages[i - 1].type === 'user') {
-        interruptionCount++
-      }
-    }
-
-    // Count unique tools from assistant messages
-    const toolNames: string[] = []
-    const assistantMessages = session.messages.filter(msg => msg.type === 'assistant')
-
-    for (const msg of assistantMessages) {
-      if (isStructuredMessageContent(msg.content)) {
-        // Canonical format - single toolUse
-        if (msg.content.toolUse?.name) {
-          toolNames.push(msg.content.toolUse.name)
-        }
-
-        // Handle old format with toolUses array (during migration)
-        const contentWithToolUses = msg.content as typeof msg.content & {
-          toolUses?: ToolUseContent[]
-        }
-        if (contentWithToolUses.toolUses && Array.isArray(contentWithToolUses.toolUses)) {
-          for (const tool of contentWithToolUses.toolUses) {
-            if (tool.name) {
-              toolNames.push(tool.name)
-            }
-          }
-        }
-      } else if (Array.isArray(msg.content)) {
-        // Fallback: Check direct array format (for other providers)
-        for (const item of msg.content) {
-          if (item.type === 'tool_use' && 'name' in item && item.name) {
-            toolNames.push(item.name as string)
-          }
-        }
-      }
-    }
-    const toolCount = new Set(toolNames).size
-
-    // Estimate errors from content
-    const errorCount = session.messages.filter(msg => {
-      let contentStr = ''
-      if (typeof msg.content === 'string') {
-        contentStr = msg.content.toLowerCase()
-      } else if (isStructuredMessageContent(msg.content)) {
-        // Parser wraps content in { text, toolUses, toolResults, structured }
-        contentStr = (msg.content.text || '').toLowerCase()
-      } else {
-        contentStr = JSON.stringify(msg.content).toLowerCase()
-      }
-      return (
-        contentStr.includes('error') ||
-        contentStr.includes('failed') ||
-        contentStr.includes('exception')
-      )
-    }).length
-
-    const durationMinutes = session.duration ? Math.round(session.duration / 60000) : 0
+    // Prefer the real error count from the metric processors; fall back to tool results
+    // flagged is_error. The previous implementation counted any message containing the
+    // substring "error", which matched every message that merely discussed error handling.
+    const errorCount =
+      readNumericMetric(context.metrics, 'error', 'error_count') ?? transcript.toolErrorCount
 
     return {
-      userName,
-      provider: context.provider,
-      durationMinutes,
-      messageCount: session.messages.length,
-      interruptionCount,
-      toolCount,
+      userName: base.userName,
+      provider: base.provider,
+      durationMinutes: base.durationMinutes,
+      messageCount: base.messageCount,
+      userTurnCount: transcript.userTurnCount,
+      interruptionCount: transcript.interruptionCount,
+      toolCount: transcript.uniqueToolCount,
+      toolsUsed: formatToolUsage(transcript),
       errorCount,
+      transcript: transcript.text || 'No conversation content found',
     }
   }
 
@@ -169,23 +191,29 @@ Respond with a JSON object containing:
   }
 
   processOutput(output: unknown, _context: ModelTaskContext): QualityAssessmentOutput {
-    // Validate the output structure
-    if (typeof output !== 'object' || output === null) {
-      throw new Error('Quality assessment output must be an object')
+    const parsed = outputSchema.safeParse(output)
+
+    if (!parsed.success) {
+      throw new Error(`Quality assessment output failed validation: ${parsed.error.message}`)
     }
 
-    const result = output as QualityAssessmentOutput
+    // Built field by field rather than spread. The CJS build resolves modules with
+    // `moduleResolution: "node"`, under which zod's inferred output type degrades to all
+    // properties optional; an explicit construction is identical under both resolutions.
+    const { score, dimensions, reasoning, strengths, improvements } = parsed.data
 
-    if (typeof result.score !== 'number' || result.score < 0 || result.score > 100) {
-      throw new Error('Quality score must be a number between 0 and 100')
-    }
-
-    // Ensure arrays exist
     return {
-      score: result.score,
-      reasoning: result.reasoning || '',
-      strengths: Array.isArray(result.strengths) ? result.strengths : [],
-      improvements: Array.isArray(result.improvements) ? result.improvements : [],
+      score,
+      dimensions: {
+        contextQuality: dimensions.contextQuality,
+        promptClarity: dimensions.promptClarity,
+        steeringEffectiveness: dimensions.steeringEffectiveness,
+        processDiscipline: dimensions.processDiscipline,
+      },
+      reasoning: reasoning ?? '',
+      strengths: strengths ?? [],
+      improvements: improvements ?? [],
+      scorerVersion: QUALITY_SCORER_VERSION,
     }
   }
 }

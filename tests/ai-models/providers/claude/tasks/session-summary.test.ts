@@ -1,359 +1,133 @@
-import { describe, it, expect } from 'vitest'
-import {
-	SessionSummaryTask,
-	type SessionSummaryInput,
-} from '../../../../../src/ai-models/providers/claude/tasks/session-summary.js'
-import {
-	MOCK_CONTEXT,
-	MOCK_SESSION,
-	EMPTY_SESSION,
-	MOCK_SESSION_WITH_PHASES,
-} from '../../../fixtures/mock-sessions.js'
+import { beforeEach, describe, expect, it } from 'vitest'
+import { SessionSummaryTask } from '../../../../../src/ai-models/providers/claude/tasks/session-summary.js'
+import { EMPTY_SESSION, MOCK_CONTEXT, MOCK_PHASE_CONTEXT } from '../../../fixtures/mock-sessions.js'
 
 describe('SessionSummaryTask', () => {
-	let task: SessionSummaryTask
-
-	beforeEach(() => {
-		task = new SessionSummaryTask()
-	})
-
-	describe('Task Definition', () => {
-		it('should have correct task type', () => {
-			expect(task.taskType).toBe('session-summary')
-		})
-
-		it('should have descriptive name', () => {
-			expect(task.name).toBe('Session Summary')
-		})
-
-		it('should have description', () => {
-			expect(task.description).toBe('Generate a concise summary of the agent session')
-		})
-
-		it('should return complete definition', () => {
-			const definition = task.getDefinition()
-
-			expect(definition.taskType).toBe('session-summary')
-			expect(definition.name).toBe('Session Summary')
-			expect(definition.config).toBeDefined()
-		})
-	})
-
-	describe('Task Configuration', () => {
-		it('should return text response format', () => {
-			const config = task.getConfig()
-
-			expect(config.responseFormat.type).toBe('text')
-		})
-
-		it('should have recording strategy for summary', () => {
-			const config = task.getConfig()
-
-			expect(config.recordingStrategy.updateAgentSession).toContain('aiModelSummary')
-		})
-
-		it('should have prompt template with variables', () => {
-			const config = task.getConfig()
-
-			expect(config.prompt).toContain('{{userName}}')
-			expect(config.prompt).toContain('{{provider}}')
-			expect(config.prompt).toContain('{{durationMinutes}}')
-			expect(config.prompt).toContain('{{messageCount}}')
-			expect(config.prompt).toContain('{{toolsUsed}}')
-			expect(config.prompt).toContain('{{userMessages}}')
-			expect(config.prompt).toContain('{{assistantActions}}')
-		})
-	})
-
-	describe('Input Preparation', () => {
-		it('should prepare valid input from context', () => {
-			const input = task.prepareInput(MOCK_CONTEXT)
-
-			expect(input).toBeDefined()
-			expect(input.userName).toBe('@testuser')
-			expect(input.provider).toBe('claude-code')
-			expect(input.messageCount).toBe(5)
-			expect(typeof input.durationMinutes).toBe('number')
-		})
-
-		it('should extract user messages', () => {
-			const input = task.prepareInput(MOCK_CONTEXT)
-
-			expect(input.userMessages).toContain('authentication system')
-			expect(input.userMessages).toContain('password hashing')
-		})
-
-		it('should extract tools used', () => {
-			const input = task.prepareInput(MOCK_CONTEXT)
-
-			expect(input.toolsUsed).toContain('write')
-			expect(input.toolsUsed).toContain('edit')
-		})
-
-		it('should extract assistant actions', () => {
-			const input = task.prepareInput(MOCK_CONTEXT)
-
-			expect(input.assistantActions).toBeTruthy()
-			expect(input.assistantActions).toContain('write')
-		})
-
-		it('should calculate duration in minutes', () => {
-			const input = task.prepareInput(MOCK_CONTEXT)
-
-			// 600000ms = 10 minutes
-			expect(input.durationMinutes).toBe(10)
-		})
-
-		it('should handle unknown duration', () => {
-			const contextNoDuration = {
-				...MOCK_CONTEXT,
-				session: { ...MOCK_SESSION, duration: undefined },
-			}
-
-			const input = task.prepareInput(contextNoDuration)
-
-			expect(input.durationMinutes).toBe('Unknown')
-		})
-
-		it('should use username from user context', () => {
-			const input = task.prepareInput(MOCK_CONTEXT)
-
-			expect(input.userName).toBe('@testuser')
-		})
-
-		it('should fallback to "the user" when no user context', () => {
-			const contextNoUser = { ...MOCK_CONTEXT, user: undefined }
-
-			const input = task.prepareInput(contextNoUser)
-
-			expect(input.userName).toBe('the user')
-		})
-
-		it('should limit user messages to first 10', () => {
-			// Create a session with many messages
-			const manyMessages = Array.from({ length: 20 }, (_, i) => ({
-				id: `msg-${i}`,
-				type: 'user' as const,
-				content: `Message ${i}`,
-				timestamp: new Date(),
-			}))
-
-			const contextManyMessages = {
-				...MOCK_CONTEXT,
-				session: { ...MOCK_SESSION, messages: manyMessages },
-			}
-
-			const input = task.prepareInput(contextManyMessages)
-
-			// Count the number of message separators (-) in the userMessages string
-			const messageCount = (input.userMessages.match(/Message/g) || []).length
-			expect(messageCount).toBeLessThanOrEqual(10)
-		})
-
-		it('should limit assistant actions to first 20 tools', () => {
-			const input = task.prepareInput(MOCK_CONTEXT)
-
-			// Should be truncated if more than 20
-			const toolCount = input.assistantActions.split(',').length
-			expect(toolCount).toBeLessThanOrEqual(20)
-		})
-
-		it('should deduplicate tools in toolsUsed', () => {
-			const input = task.prepareInput(MOCK_CONTEXT)
-
-			// Each tool should appear only once in the list
-			const tools = input.toolsUsed.split(', ')
-			const uniqueTools = [...new Set(tools)]
-			expect(tools.length).toBe(uniqueTools.length)
-		})
-
-		it('should handle session with no tools', () => {
-			const noToolsSession = {
-				...MOCK_SESSION,
-				messages: [
-					{ id: 'msg-1', type: 'user' as const, content: 'Hello', timestamp: new Date() },
-					{
-						id: 'msg-2',
-						type: 'assistant' as const,
-						content: { text: 'Hi', toolUses: [], toolResults: [], structured: [] },
-						timestamp: new Date(),
-					},
-				],
-			}
-
-			const contextNoTools = { ...MOCK_CONTEXT, session: noToolsSession }
-			const input = task.prepareInput(contextNoTools)
-
-			expect(input.toolsUsed).toBe('None')
-			expect(input.assistantActions).toBe('No tool uses found')
-		})
-
-		it('should throw error when session is missing', () => {
-			const contextNoSession = { ...MOCK_CONTEXT, session: undefined }
-
-			expect(() => task.prepareInput(contextNoSession)).toThrow(
-				'Session data is required for summary task'
-			)
-		})
-
-		it('should handle structured message content', () => {
-			const input = task.prepareInput(MOCK_CONTEXT)
-
-			expect(input.userMessages).toBeTruthy()
-			expect(input.assistantActions).toBeTruthy()
-		})
-
-		it('should handle array message content (fallback)', () => {
-			const arrayContentSession = {
-				...MOCK_SESSION,
-				messages: [
-					{
-						id: 'msg-1',
-						type: 'user' as const,
-						content: [{ type: 'text', text: 'Array content message' }],
-						timestamp: new Date(),
-					},
-				],
-			}
-
-			const contextArrayContent = { ...MOCK_CONTEXT, session: arrayContentSession }
-			const input = task.prepareInput(contextArrayContent)
-
-			expect(input.userMessages).toContain('Array content message')
-		})
-
-		it('should filter out empty user messages', () => {
-			const emptyMessagesSession = {
-				...MOCK_SESSION,
-				messages: [
-					{ id: 'msg-1', type: 'user' as const, content: '', timestamp: new Date() },
-					{ id: 'msg-2', type: 'user' as const, content: 'Real message', timestamp: new Date() },
-				],
-			}
-
-			const contextEmptyMessages = { ...MOCK_CONTEXT, session: emptyMessagesSession }
-			const input = task.prepareInput(contextEmptyMessages)
-
-			expect(input.userMessages).not.toContain('- \n')
-			expect(input.userMessages).toContain('Real message')
-		})
-	})
-
-	describe('Output Processing', () => {
-		it('should trim string output', () => {
-			const output = task.processOutput('  Test summary with spaces  ', MOCK_CONTEXT)
-
-			expect(output).toBe('Test summary with spaces')
-		})
-
-		it('should convert non-string output to string', () => {
-			const output = task.processOutput(12345, MOCK_CONTEXT)
-
-			expect(typeof output).toBe('string')
-			expect(output).toBe('12345')
-		})
-
-		it('should handle object output by converting to string', () => {
-			const output = task.processOutput({ summary: 'test' }, MOCK_CONTEXT)
-
-			expect(typeof output).toBe('string')
-			// Object.prototype.toString() returns '[object Object]'
-			expect(output).toBe('[object Object]')
-		})
-
-		it('should handle empty string output', () => {
-			const output = task.processOutput('', MOCK_CONTEXT)
-
-			expect(output).toBe('')
-		})
-
-		it('should handle multi-line output', () => {
-			const multiline = 'Line 1\nLine 2\nLine 3'
-			const output = task.processOutput(multiline, MOCK_CONTEXT)
-
-			expect(output).toBe(multiline)
-		})
-	})
-
-	describe('Execution Validation', () => {
-		it('should allow execution with valid context', () => {
-			expect(task.canExecute(MOCK_CONTEXT)).toBe(true)
-		})
-
-		it('should reject execution without session', () => {
-			const contextNoSession = { ...MOCK_CONTEXT, session: undefined }
-
-			expect(task.canExecute(contextNoSession)).toBe(false)
-		})
-
-		it('should reject execution with empty session', () => {
-			const contextEmptySession = { ...MOCK_CONTEXT, session: EMPTY_SESSION }
-
-			expect(task.canExecute(contextEmptySession)).toBe(false)
-		})
-
-		it('should reject execution without sessionId', () => {
-			const contextNoId = { ...MOCK_CONTEXT, sessionId: '' }
-
-			expect(task.canExecute(contextNoId)).toBe(false)
-		})
-
-		it('should reject execution without tenantId', () => {
-			const contextNoTenant = { ...MOCK_CONTEXT, tenantId: '' }
-
-			expect(task.canExecute(contextNoTenant)).toBe(false)
-		})
-
-		it('should reject execution without userId', () => {
-			const contextNoUser = { ...MOCK_CONTEXT, userId: '' }
-
-			expect(task.canExecute(contextNoUser)).toBe(false)
-		})
-
-		it('should allow execution with phase context', () => {
-			const phaseContext = {
-				...MOCK_CONTEXT,
-				session: MOCK_SESSION_WITH_PHASES,
-			}
-
-			expect(task.canExecute(phaseContext)).toBe(true)
-		})
-	})
-
-	describe('Integration', () => {
-		it('should work with complete session data', () => {
-			const config = task.getConfig()
-			const input = task.prepareInput(MOCK_CONTEXT)
-
-			expect(config).toBeDefined()
-			expect(input).toBeDefined()
-			expect(task.canExecute(MOCK_CONTEXT)).toBe(true)
-		})
-
-		it('should produce valid input for AI model', () => {
-			const input = task.prepareInput(MOCK_CONTEXT)
-
-			// All required fields should be present
-			expect(input.userName).toBeTruthy()
-			expect(input.provider).toBeTruthy()
-			expect(input.durationMinutes).toBeDefined()
-			expect(input.messageCount).toBeGreaterThan(0)
-			expect(input.toolsUsed).toBeTruthy()
-			expect(input.userMessages).toBeTruthy()
-			expect(input.assistantActions).toBeTruthy()
-		})
-
-		it('should handle session with phases', () => {
-			const phaseContext = {
-				...MOCK_CONTEXT,
-				session: MOCK_SESSION_WITH_PHASES,
-			}
-
-			const input = task.prepareInput(phaseContext)
-
-			expect(input.messageCount).toBe(9)
-			expect(input.userMessages).toContain('REST API')
-			expect(input.toolsUsed).toContain('write')
-		})
-	})
+  let task: SessionSummaryTask
+
+  beforeEach(() => {
+    task = new SessionSummaryTask()
+  })
+
+  describe('Task Definition', () => {
+    it('should have correct task type', () => {
+      expect(task.taskType).toBe('session-summary')
+    })
+
+    it('should have descriptive name', () => {
+      expect(task.name).toBe('Session Summary')
+    })
+
+    it('should return complete definition', () => {
+      const definition = task.getDefinition()
+
+      expect(definition.taskType).toBe('session-summary')
+      expect(definition.config).toBeDefined()
+    })
+  })
+
+  describe('Task Configuration', () => {
+    it('should return a text response format', () => {
+      expect(task.getConfig().responseFormat.type).toBe('text')
+    })
+
+    it('should record the summary on the session', () => {
+      expect(task.getConfig().recordingStrategy.updateAgentSession).toContain('aiModelSummary')
+    })
+
+    it('should ask whether the work was completed', () => {
+      expect(task.getConfig().prompt).toContain('completed or left incomplete')
+    })
+
+    it('should use a single transcript variable', () => {
+      const prompt = task.getConfig().prompt
+
+      expect(prompt).toContain('{{transcript}}')
+      // Replaced by the shared condenser; three overlapping extractions are gone.
+      expect(prompt).not.toContain('{{userMessages}}')
+      expect(prompt).not.toContain('{{assistantResponses}}')
+    })
+
+    it('should tell the model that step numbers are not contiguous', () => {
+      expect(task.getConfig().prompt).toContain('not contiguous')
+    })
+  })
+
+  describe('Input Preparation', () => {
+    it('should include the user turns in the transcript', () => {
+      const input = task.prepareInput(MOCK_CONTEXT)
+
+      expect(input.transcript).toContain('user authentication system')
+      expect(input.transcript).toContain('password hashing')
+    })
+
+    it('should retain the FINAL user turn', () => {
+      // Regression: v1 kept only the first 10 user messages, so the end of a long
+      // session - where completion is stated - was invisible to the model.
+      expect(task.prepareInput(MOCK_CONTEXT).transcript).toContain('Perfect, thank you!')
+    })
+
+    it('should retain the closing assistant message', () => {
+      const input = task.prepareInput(MOCK_PHASE_CONTEXT)
+
+      expect(input.transcript).toContain('The REST API is complete')
+    })
+
+    it('should include interruptions and slash commands', () => {
+      const input = task.prepareInput(MOCK_PHASE_CONTEXT)
+
+      expect(input.transcript).toContain('interruption')
+      expect(input.transcript).toContain('use Zod for validation')
+      expect(input.transcript).toContain('command')
+    })
+
+    it('should summarise tool usage with counts', () => {
+      const input = task.prepareInput(MOCK_CONTEXT)
+
+      expect(input.toolsUsed).toContain('Write')
+      expect(input.toolsUsed).toContain('Edit')
+    })
+
+    it('should flag failed tool calls in the usage summary', () => {
+      expect(task.prepareInput(MOCK_PHASE_CONTEXT).toolsUsed).toContain('failed')
+    })
+
+    it('should not leak tool inputs into the transcript', () => {
+      // The condenser replaces tool bodies with counts; file contents must not appear.
+      const input = task.prepareInput(MOCK_CONTEXT)
+
+      expect(input.transcript).not.toContain('export class User {}')
+    })
+
+    it('should report the message count and duration', () => {
+      const input = task.prepareInput(MOCK_CONTEXT)
+
+      expect(input.messageCount).toBe(9)
+      expect(input.durationMinutes).toBe(10)
+    })
+
+    it('should throw when there is no session', () => {
+      expect(() => task.prepareInput({ ...MOCK_CONTEXT, session: undefined })).toThrow()
+    })
+  })
+
+  describe('canExecute', () => {
+    it('should run for a session with messages', () => {
+      expect(task.canExecute(MOCK_CONTEXT)).toBe(true)
+    })
+
+    it('should not run for an empty session', () => {
+      expect(task.canExecute({ ...MOCK_CONTEXT, session: EMPTY_SESSION })).toBe(false)
+    })
+  })
+
+  describe('Output Processing', () => {
+    it('should trim the summary text', () => {
+      expect(task.processOutput('  A summary.  ', MOCK_CONTEXT)).toBe('A summary.')
+    })
+
+    it('should coerce non-string output', () => {
+      expect(task.processOutput(42, MOCK_CONTEXT)).toBe('42')
+    })
+  })
 })

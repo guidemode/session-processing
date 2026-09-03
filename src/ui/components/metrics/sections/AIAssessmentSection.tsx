@@ -5,11 +5,17 @@
 import type { AIModelMetadata } from '@guidemode/types'
 import { CpuChipIcon } from '@heroicons/react/24/outline'
 import { MetricSection } from '../MetricSection.js'
+import { getMetricColor, getMetricThreshold } from '../metricThresholds.js'
 
 interface AIAssessmentSectionProps {
   aiModelSummary?: string | null
   aiModelQualityScore?: number | null
   aiModelMetadata?: AIModelMetadata | null
+}
+
+const AI_QUALITY_BANDS = getMetricThreshold('ai-model-quality-score') ?? {
+  excellent: 80,
+  warning: 60,
 }
 
 export function AIAssessmentSection({
@@ -37,20 +43,17 @@ export function AIAssessmentSection({
                 <div className="bg-base-200 rounded-lg p-4 md:w-1/4 flex-shrink-0">
                   <div className="text-xs text-base-content/60 mb-1">Quality Score</div>
                   <div
-                    className={`text-3xl font-bold ${
-                      aiModelQualityScore >= 80
-                        ? 'text-success'
-                        : aiModelQualityScore >= 60
-                          ? 'text-warning'
-                          : 'text-error'
-                    }`}
+                    className={`text-3xl font-bold ${getMetricColor(
+                      aiModelQualityScore,
+                      'ai-model-quality-score'
+                    )}`}
                   >
                     {aiModelQualityScore}%
                   </div>
                   <div className="text-xs text-base-content/60 mt-1">
-                    {aiModelQualityScore >= 80
+                    {aiModelQualityScore >= AI_QUALITY_BANDS.excellent
                       ? 'Excellent session quality'
-                      : aiModelQualityScore >= 60
+                      : aiModelQualityScore >= AI_QUALITY_BANDS.warning
                         ? 'Good session quality'
                         : 'Room for improvement'}
                   </div>

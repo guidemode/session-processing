@@ -1,537 +1,248 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { beforeEach, describe, expect, it } from 'vitest'
 import {
-	QualityAssessmentTask,
-	type QualityAssessmentInput,
-	type QualityAssessmentOutput,
+  QUALITY_SCORER_VERSION,
+  QualityAssessmentTask,
 } from '../../../../../src/ai-models/providers/claude/tasks/quality-assessment.js'
-import {
-	MOCK_CONTEXT,
-	MOCK_SESSION,
-	EMPTY_SESSION,
-	MOCK_SESSION_WITH_PHASES,
-} from '../../../fixtures/mock-sessions.js'
+import { EMPTY_SESSION, MOCK_CONTEXT, MOCK_PHASE_CONTEXT } from '../../../fixtures/mock-sessions.js'
+
+/** A well-formed model response, used as the baseline for validation tests. */
+const VALID_OUTPUT = {
+  score: 72,
+  dimensions: {
+    contextQuality: 70,
+    promptClarity: 80,
+    steeringEffectiveness: 65,
+    processDiscipline: 73,
+  },
+  reasoning: 'Clear initial request with concrete file paths.',
+  strengths: ['Provided the failing command and its output'],
+  improvements: ['State the acceptance criteria up front'],
+}
 
 describe('QualityAssessmentTask', () => {
-	let task: QualityAssessmentTask
-
-	beforeEach(() => {
-		task = new QualityAssessmentTask()
-	})
-
-	describe('Task Definition', () => {
-		it('should have correct task type', () => {
-			expect(task.taskType).toBe('quality-assessment')
-		})
-
-		it('should have descriptive name', () => {
-			expect(task.name).toBe('Quality Assessment')
-		})
-
-		it('should have description', () => {
-			expect(task.description).toBe('Evaluate session quality and provide a score')
-		})
-
-		it('should return complete definition', () => {
-			const definition = task.getDefinition()
-
-			expect(definition.taskType).toBe('quality-assessment')
-			expect(definition.name).toBe('Quality Assessment')
-			expect(definition.config).toBeDefined()
-		})
-	})
-
-	describe('Task Configuration', () => {
-		it('should return JSON response format', () => {
-			const config = task.getConfig()
-
-			expect(config.responseFormat.type).toBe('json')
-		})
-
-		it('should have JSON schema with required fields', () => {
-			const config = task.getConfig()
-
-			expect(config.responseFormat.schema).toBeDefined()
-			expect(config.responseFormat.schema?.properties).toHaveProperty('score')
-			expect(config.responseFormat.schema?.properties).toHaveProperty('reasoning')
-			expect(config.responseFormat.schema?.properties).toHaveProperty('strengths')
-			expect(config.responseFormat.schema?.properties).toHaveProperty('improvements')
-		})
-
-		it('should have score constraints in schema', () => {
-			const config = task.getConfig()
-			const scoreProperty = config.responseFormat.schema?.properties?.score as Record<
-				string,
-				unknown
-			>
-
-			expect(scoreProperty.type).toBe('number')
-			expect(scoreProperty.minimum).toBe(0)
-			expect(scoreProperty.maximum).toBe(100)
-		})
-
-		it('should have recording strategy for quality metrics', () => {
-			const config = task.getConfig()
-
-			expect(config.recordingStrategy.updateAgentSession).toContain('aiModelQualityScore')
-			expect(config.recordingStrategy.updateAgentSession).toContain('aiModelMetadata')
-			expect(config.recordingStrategy.createMetrics).toBe(true)
-			expect(config.recordingStrategy.metricType).toBe('ai_model')
-		})
-
-		it('should have prompt template with quality criteria', () => {
-			const config = task.getConfig()
-
-			expect(config.prompt).toContain('{{userName}}')
-			expect(config.prompt).toContain('Context Quality')
-			expect(config.prompt).toContain('Prompt Clarity')
-			expect(config.prompt).toContain('Steering Effectiveness')
-		})
-	})
-
-	describe('Input Preparation', () => {
-		it('should prepare valid input from context', () => {
-			const input = task.prepareInput(MOCK_CONTEXT)
-
-			expect(input).toBeDefined()
-			expect(input.userName).toBe('@testuser')
-			expect(input.provider).toBe('claude-code')
-			expect(input.messageCount).toBe(5)
-			expect(input.durationMinutes).toBe(10)
-		})
-
-		it('should count interruptions correctly', () => {
-			// Mock session has one interruption (msg-3 and msg-5 are consecutive users)
-			const input = task.prepareInput(MOCK_CONTEXT)
-
-			// In MOCK_SESSION: user, assistant, user, assistant, user
-			// No consecutive user messages, so 0 interruptions
-			expect(input.interruptionCount).toBe(0)
-		})
-
-		it('should detect consecutive user messages as interruptions', () => {
-			const interruptedSession = {
-				...MOCK_SESSION,
-				messages: [
-					{ id: 'msg-1', type: 'user' as const, content: 'First', timestamp: new Date() },
-					{ id: 'msg-2', type: 'user' as const, content: 'Second', timestamp: new Date() },
-					{
-						id: 'msg-3',
-						type: 'assistant' as const,
-						content: { text: 'Response', toolUses: [], toolResults: [], structured: [] },
-						timestamp: new Date(),
-					},
-					{ id: 'msg-4', type: 'user' as const, content: 'Third', timestamp: new Date() },
-					{ id: 'msg-5', type: 'user' as const, content: 'Fourth', timestamp: new Date() },
-				],
-			}
-
-			const contextInterrupted = { ...MOCK_CONTEXT, session: interruptedSession }
-			const input = task.prepareInput(contextInterrupted)
-
-			// Two consecutive user pairs = 2 interruptions
-			expect(input.interruptionCount).toBe(2)
-		})
-
-		it('should count unique tools used', () => {
-			const input = task.prepareInput(MOCK_CONTEXT)
-
-			// MOCK_SESSION uses 'write' and 'edit' tools
-			expect(input.toolCount).toBe(2)
-		})
-
-		it('should deduplicate tool names', () => {
-			const repeatedToolsSession = {
-				...MOCK_SESSION,
-				messages: [
-					{
-						id: 'msg-1',
-						type: 'assistant' as const,
-						content: {
-							type: 'structured',
-							text: 'Using write',
-							toolUses: [{ type: 'tool_use', id: 'tool-1', name: 'write', input: {} }],
-							toolResults: [],
-							structured: [],
-						},
-						timestamp: new Date(),
-					},
-					{
-						id: 'msg-2',
-						type: 'assistant' as const,
-						content: {
-							type: 'structured',
-							text: 'Using write again',
-							toolUses: [{ type: 'tool_use', id: 'tool-2', name: 'write', input: {} }],
-							toolResults: [],
-							structured: [],
-						},
-						timestamp: new Date(),
-					},
-				],
-			}
-
-			const contextRepeatedTools = { ...MOCK_CONTEXT, session: repeatedToolsSession }
-			const input = task.prepareInput(contextRepeatedTools)
-
-			// Only 1 unique tool despite 2 uses
-			expect(input.toolCount).toBe(1)
-		})
-
-		it('should estimate error count from content', () => {
-			const errorSession = {
-				...MOCK_SESSION,
-				messages: [
-					{ id: 'msg-1', type: 'user' as const, content: 'Do this task', timestamp: new Date() },
-					{
-						id: 'msg-2',
-						type: 'assistant' as const,
-						content: { text: 'Error occurred while processing', toolUses: [], toolResults: [], structured: [] },
-						timestamp: new Date(),
-					},
-					{
-						id: 'msg-3',
-						type: 'user' as const,
-						content: 'The test failed',
-						timestamp: new Date(),
-					},
-					{
-						id: 'msg-4',
-						type: 'assistant' as const,
-						content: { text: 'Caught an exception', toolUses: [], toolResults: [], structured: [] },
-						timestamp: new Date(),
-					},
-				],
-			}
-
-			const contextError = { ...MOCK_CONTEXT, session: errorSession }
-			const input = task.prepareInput(contextError)
-
-			// Should find 'error', 'failed', 'exception'
-			expect(input.errorCount).toBeGreaterThan(0)
-		})
-
-		it('should detect errors in structured content', () => {
-			const structuredErrorSession = {
-				...MOCK_SESSION,
-				messages: [
-					{
-						id: 'msg-1',
-						type: 'assistant' as const,
-						content: { text: 'An error occurred', toolUses: [], toolResults: [], structured: [] },
-						timestamp: new Date(),
-					},
-				],
-			}
-
-			const contextStructuredError = { ...MOCK_CONTEXT, session: structuredErrorSession }
-			const input = task.prepareInput(contextStructuredError)
-
-			expect(input.errorCount).toBe(1)
-		})
-
-		it('should handle array content format (fallback)', () => {
-			const arrayContentSession = {
-				...MOCK_SESSION,
-				messages: [
-					{
-						id: 'msg-1',
-						type: 'assistant' as const,
-						content: [
-							{ type: 'tool_use', id: 'tool-1', name: 'bash', input: {} },
-							{ type: 'tool_use', id: 'tool-2', name: 'read', input: {} },
-						],
-						timestamp: new Date(),
-					},
-				],
-			}
-
-			const contextArrayContent = { ...MOCK_CONTEXT, session: arrayContentSession }
-			const input = task.prepareInput(contextArrayContent)
-
-			expect(input.toolCount).toBe(2)
-		})
-
-		it('should use fallback username when no user context', () => {
-			const contextNoUser = { ...MOCK_CONTEXT, user: undefined }
-
-			const input = task.prepareInput(contextNoUser)
-
-			expect(input.userName).toBe('the user')
-		})
-
-		it('should throw error when session is missing', () => {
-			const contextNoSession = { ...MOCK_CONTEXT, session: undefined }
-
-			expect(() => task.prepareInput(contextNoSession)).toThrow(
-				'Session data is required for quality assessment'
-			)
-		})
-
-		it('should calculate duration in minutes', () => {
-			const input = task.prepareInput(MOCK_CONTEXT)
-
-			expect(input.durationMinutes).toBe(10)
-		})
-
-		it('should handle zero duration', () => {
-			const contextNoDuration = {
-				...MOCK_CONTEXT,
-				session: { ...MOCK_SESSION, duration: 0 },
-			}
-
-			const input = task.prepareInput(contextNoDuration)
-
-			expect(input.durationMinutes).toBe(0)
-		})
-	})
-
-	describe('Output Processing', () => {
-		it('should validate and return valid output', () => {
-			const validOutput: QualityAssessmentOutput = {
-				score: 85,
-				reasoning: 'Good collaboration',
-				strengths: ['Clear prompts', 'Good context'],
-				improvements: ['More documentation'],
-			}
-
-			const result = task.processOutput(validOutput, MOCK_CONTEXT)
-
-			expect(result).toEqual(validOutput)
-		})
-
-		it('should reject non-object output', () => {
-			expect(() => task.processOutput('string output', MOCK_CONTEXT)).toThrow(
-				'Quality assessment output must be an object'
-			)
-		})
-
-		it('should reject null output', () => {
-			expect(() => task.processOutput(null, MOCK_CONTEXT)).toThrow(
-				'Quality assessment output must be an object'
-			)
-		})
-
-		it('should reject invalid score below 0', () => {
-			const invalidOutput = {
-				score: -10,
-				reasoning: 'Invalid',
-			}
-
-			expect(() => task.processOutput(invalidOutput, MOCK_CONTEXT)).toThrow(
-				'Quality score must be a number between 0 and 100'
-			)
-		})
-
-		it('should reject invalid score above 100', () => {
-			const invalidOutput = {
-				score: 150,
-				reasoning: 'Invalid',
-			}
-
-			expect(() => task.processOutput(invalidOutput, MOCK_CONTEXT)).toThrow(
-				'Quality score must be a number between 0 and 100'
-			)
-		})
-
-		it('should reject non-number score', () => {
-			const invalidOutput = {
-				score: '85',
-				reasoning: 'Invalid',
-			}
-
-			expect(() => task.processOutput(invalidOutput, MOCK_CONTEXT)).toThrow(
-				'Quality score must be a number between 0 and 100'
-			)
-		})
-
-		it('should accept score of 0', () => {
-			const validOutput = {
-				score: 0,
-				reasoning: 'Poor quality',
-				strengths: [],
-				improvements: ['Everything'],
-			}
-
-			const result = task.processOutput(validOutput, MOCK_CONTEXT)
-
-			expect(result.score).toBe(0)
-		})
-
-		it('should accept score of 100', () => {
-			const validOutput = {
-				score: 100,
-				reasoning: 'Perfect quality',
-				strengths: ['Excellent'],
-				improvements: [],
-			}
-
-			const result = task.processOutput(validOutput, MOCK_CONTEXT)
-
-			expect(result.score).toBe(100)
-		})
-
-		it('should provide default empty string for missing reasoning', () => {
-			const outputNoReasoning = {
-				score: 75,
-			}
-
-			const result = task.processOutput(outputNoReasoning, MOCK_CONTEXT)
-
-			expect(result.reasoning).toBe('')
-		})
-
-		it('should provide empty arrays for missing strengths', () => {
-			const outputNoStrengths = {
-				score: 75,
-				reasoning: 'Good',
-			}
-
-			const result = task.processOutput(outputNoStrengths, MOCK_CONTEXT)
-
-			expect(result.strengths).toEqual([])
-		})
-
-		it('should provide empty arrays for missing improvements', () => {
-			const outputNoImprovements = {
-				score: 75,
-				reasoning: 'Good',
-			}
-
-			const result = task.processOutput(outputNoImprovements, MOCK_CONTEXT)
-
-			expect(result.improvements).toEqual([])
-		})
-
-		it('should handle non-array strengths by converting to empty array', () => {
-			const invalidArrayOutput = {
-				score: 75,
-				reasoning: 'Good',
-				strengths: 'not an array',
-			}
-
-			const result = task.processOutput(invalidArrayOutput, MOCK_CONTEXT)
-
-			expect(result.strengths).toEqual([])
-		})
-
-		it('should handle non-array improvements by converting to empty array', () => {
-			const invalidArrayOutput = {
-				score: 75,
-				reasoning: 'Good',
-				improvements: 'not an array',
-			}
-
-			const result = task.processOutput(invalidArrayOutput, MOCK_CONTEXT)
-
-			expect(result.improvements).toEqual([])
-		})
-
-		it('should preserve valid arrays', () => {
-			const validOutput = {
-				score: 85,
-				reasoning: 'Great',
-				strengths: ['Strength 1', 'Strength 2'],
-				improvements: ['Improvement 1'],
-			}
-
-			const result = task.processOutput(validOutput, MOCK_CONTEXT)
-
-			expect(result.strengths).toHaveLength(2)
-			expect(result.improvements).toHaveLength(1)
-		})
-	})
-
-	describe('Execution Validation', () => {
-		it('should allow execution with valid context', () => {
-			expect(task.canExecute(MOCK_CONTEXT)).toBe(true)
-		})
-
-		it('should reject execution without session', () => {
-			const contextNoSession = { ...MOCK_CONTEXT, session: undefined }
-
-			expect(task.canExecute(contextNoSession)).toBe(false)
-		})
-
-		it('should reject execution with empty session', () => {
-			const contextEmptySession = { ...MOCK_CONTEXT, session: EMPTY_SESSION }
-
-			expect(task.canExecute(contextEmptySession)).toBe(false)
-		})
-
-		it('should reject execution without sessionId', () => {
-			const contextNoId = { ...MOCK_CONTEXT, sessionId: '' }
-
-			expect(task.canExecute(contextNoId)).toBe(false)
-		})
-
-		it('should allow execution with phase context', () => {
-			const phaseContext = {
-				...MOCK_CONTEXT,
-				session: MOCK_SESSION_WITH_PHASES,
-			}
-
-			expect(task.canExecute(phaseContext)).toBe(true)
-		})
-	})
-
-	describe('Integration', () => {
-		it('should work with complete session data', () => {
-			const config = task.getConfig()
-			const input = task.prepareInput(MOCK_CONTEXT)
-
-			expect(config).toBeDefined()
-			expect(input).toBeDefined()
-			expect(task.canExecute(MOCK_CONTEXT)).toBe(true)
-		})
-
-		it('should produce valid input for AI model', () => {
-			const input = task.prepareInput(MOCK_CONTEXT)
-
-			expect(input.userName).toBeTruthy()
-			expect(input.provider).toBeTruthy()
-			expect(input.durationMinutes).toBeDefined()
-			expect(input.messageCount).toBeGreaterThan(0)
-			expect(input.interruptionCount).toBeGreaterThanOrEqual(0)
-			expect(input.toolCount).toBeGreaterThanOrEqual(0)
-			expect(input.errorCount).toBeGreaterThanOrEqual(0)
-		})
-
-		it('should handle session with phases and complex interactions', () => {
-			const phaseContext = {
-				...MOCK_CONTEXT,
-				session: MOCK_SESSION_WITH_PHASES,
-			}
-
-			const input = task.prepareInput(phaseContext)
-
-			expect(input.messageCount).toBe(9)
-			expect(input.interruptionCount).toBeGreaterThanOrEqual(0)
-			expect(input.toolCount).toBeGreaterThan(0)
-		})
-
-		it('should handle full quality assessment flow', () => {
-			// Prepare input
-			const input = task.prepareInput(MOCK_CONTEXT)
-			expect(input).toBeDefined()
-
-			// Mock AI output
-			const aiOutput: QualityAssessmentOutput = {
-				score: 90,
-				reasoning: 'Excellent collaboration with clear context and effective prompts',
-				strengths: [
-					'Provided comprehensive technical details',
-					'Asked specific, actionable questions',
-				],
-				improvements: ['Could add more documentation upfront'],
-			}
-
-			// Process output
-			const result = task.processOutput(aiOutput, MOCK_CONTEXT)
-
-			expect(result.score).toBe(90)
-			expect(result.reasoning).toBeTruthy()
-			expect(result.strengths.length).toBeGreaterThan(0)
-			expect(result.improvements.length).toBeGreaterThan(0)
-		})
-	})
+  let task: QualityAssessmentTask
+
+  beforeEach(() => {
+    task = new QualityAssessmentTask()
+  })
+
+  describe('Task Definition', () => {
+    it('should have correct task type', () => {
+      expect(task.taskType).toBe('quality-assessment')
+    })
+
+    it('should have descriptive name', () => {
+      expect(task.name).toBe('Quality Assessment')
+    })
+
+    it('should return complete definition', () => {
+      const definition = task.getDefinition()
+
+      expect(definition.taskType).toBe('quality-assessment')
+      expect(definition.name).toBe('Quality Assessment')
+      expect(definition.config).toBeDefined()
+    })
+  })
+
+  describe('Task Configuration', () => {
+    it('should return JSON response format', () => {
+      expect(task.getConfig().responseFormat.type).toBe('json')
+    })
+
+    it('should declare the score and per-dimension schema', () => {
+      const schema = task.getConfig().responseFormat.schema
+
+      expect(schema?.properties).toHaveProperty('score')
+      expect(schema?.properties).toHaveProperty('dimensions')
+      expect(schema?.properties).toHaveProperty('reasoning')
+    })
+
+    it('should constrain the score to 0-100', () => {
+      const schema = task.getConfig().responseFormat.schema
+      const properties = schema?.properties as Record<string, Record<string, unknown>>
+
+      expect(properties.score.minimum).toBe(0)
+      expect(properties.score.maximum).toBe(100)
+    })
+
+    it('should record the score and metadata on the session', () => {
+      const strategy = task.getConfig().recordingStrategy
+
+      expect(strategy.updateAgentSession).toContain('aiModelQualityScore')
+      expect(strategy.updateAgentSession).toContain('aiModelMetadata')
+      expect(strategy.createMetrics).toBe(true)
+    })
+
+    it('should give the model the transcript, not just aggregate counts', () => {
+      // The whole point of v2: a prompt that asks about context quality and prompt
+      // clarity is unanswerable without the actual messages.
+      expect(task.getConfig().prompt).toContain('{{transcript}}')
+    })
+
+    it('should define scoring anchors so the scale is not arbitrary', () => {
+      const prompt = task.getConfig().prompt
+
+      expect(prompt).toContain('0-20')
+      expect(prompt).toContain('81-100')
+    })
+
+    it('should ask for all four dimensions', () => {
+      const prompt = task.getConfig().prompt
+
+      expect(prompt).toContain('contextQuality')
+      expect(prompt).toContain('promptClarity')
+      expect(prompt).toContain('steeringEffectiveness')
+      expect(prompt).toContain('processDiscipline')
+    })
+
+    it('should tell the model that step numbers are not contiguous', () => {
+      expect(task.getConfig().prompt).toContain('not contiguous')
+    })
+  })
+
+  describe('Input Preparation', () => {
+    it('should include a rendered transcript', () => {
+      const input = task.prepareInput(MOCK_CONTEXT)
+
+      expect(input.transcript).toContain('user authentication system')
+    })
+
+    it('should count tools that the canonical parser puts on tool_use messages', () => {
+      // Regression: v1 read `msg.type === 'assistant'`, but the canonical parser emits
+      // tool uses as their own `tool_use` messages, so this was always 0.
+      const input = task.prepareInput(MOCK_CONTEXT)
+
+      expect(input.toolCount).toBe(2)
+      expect(input.toolsUsed).toContain('Write')
+      expect(input.toolsUsed).toContain('Edit')
+    })
+
+    it('should count interruptions by message type', () => {
+      // Regression: v1 counted consecutive `type === 'user'` messages, which never fires
+      // because tool messages sit between turns and interruptions have their own type.
+      const input = task.prepareInput(MOCK_PHASE_CONTEXT)
+
+      expect(input.interruptionCount).toBe(1)
+    })
+
+    it('should report zero interruptions for a session without any', () => {
+      expect(task.prepareInput(MOCK_CONTEXT).interruptionCount).toBe(0)
+    })
+
+    it('should count every user-authored turn, including slash commands', () => {
+      const input = task.prepareInput(MOCK_PHASE_CONTEXT)
+
+      // 3 plain user turns + 1 slash command + 1 interruption
+      expect(input.userTurnCount).toBe(5)
+    })
+
+    it('should derive errors from failed tool results, not the word "error"', () => {
+      const input = task.prepareInput(MOCK_PHASE_CONTEXT)
+
+      expect(input.errorCount).toBe(1)
+    })
+
+    it('should prefer the precomputed error metric when one is supplied', () => {
+      const input = task.prepareInput({
+        ...MOCK_PHASE_CONTEXT,
+        metrics: [{ metricType: 'error', metrics: { error_count: 7 } }],
+      })
+
+      expect(input.errorCount).toBe(7)
+    })
+
+    it('should fall back to transcript errors when metrics are absent', () => {
+      expect(task.prepareInput({ ...MOCK_PHASE_CONTEXT, metrics: undefined }).errorCount).toBe(1)
+    })
+
+    it('should use the display name for the user', () => {
+      expect(task.prepareInput(MOCK_CONTEXT).userName).toBe('@testuser')
+    })
+
+    it('should fall back to "the user" when no user is supplied', () => {
+      const input = task.prepareInput({ ...MOCK_CONTEXT, user: undefined })
+
+      expect(input.userName).toBe('the user')
+    })
+
+    it('should throw when there is no session', () => {
+      expect(() => task.prepareInput({ ...MOCK_CONTEXT, session: undefined })).toThrow()
+    })
+  })
+
+  describe('canExecute', () => {
+    it('should run for a session with messages', () => {
+      expect(task.canExecute(MOCK_CONTEXT)).toBe(true)
+    })
+
+    it('should not run for an empty session', () => {
+      expect(task.canExecute({ ...MOCK_CONTEXT, session: EMPTY_SESSION })).toBe(false)
+    })
+
+    it('should not run without a session', () => {
+      expect(task.canExecute({ ...MOCK_CONTEXT, session: undefined })).toBe(false)
+    })
+  })
+
+  describe('Output Processing', () => {
+    it('should accept a well-formed response', () => {
+      const result = task.processOutput(VALID_OUTPUT, MOCK_CONTEXT)
+
+      expect(result.score).toBe(72)
+      expect(result.dimensions.promptClarity).toBe(80)
+      expect(result.reasoning).toBe('Clear initial request with concrete file paths.')
+    })
+
+    it('should stamp the scorer version so runs are comparable', () => {
+      const result = task.processOutput(VALID_OUTPUT, MOCK_CONTEXT)
+
+      expect(result.scorerVersion).toBe(QUALITY_SCORER_VERSION)
+    })
+
+    it('should preserve a legitimate score of zero', () => {
+      const result = task.processOutput(
+        { ...VALID_OUTPUT, score: 0 },
+        MOCK_CONTEXT
+      )
+
+      expect(result.score).toBe(0)
+    })
+
+    it('should default missing arrays rather than failing', () => {
+      const { strengths, improvements, ...rest } = VALID_OUTPUT
+      const result = task.processOutput(rest, MOCK_CONTEXT)
+
+      expect(result.strengths).toEqual([])
+      expect(result.improvements).toEqual([])
+    })
+
+    it('should reject a score above 100', () => {
+      expect(() => task.processOutput({ ...VALID_OUTPUT, score: 150 }, MOCK_CONTEXT)).toThrow(
+        /validation/
+      )
+    })
+
+    it('should reject a negative score', () => {
+      expect(() => task.processOutput({ ...VALID_OUTPUT, score: -1 }, MOCK_CONTEXT)).toThrow(
+        /validation/
+      )
+    })
+
+    it('should reject a non-numeric score', () => {
+      expect(() => task.processOutput({ ...VALID_OUTPUT, score: 'high' }, MOCK_CONTEXT)).toThrow(
+        /validation/
+      )
+    })
+
+    it('should reject a response missing the dimensions', () => {
+      const { dimensions, ...rest } = VALID_OUTPUT
+
+      expect(() => task.processOutput(rest, MOCK_CONTEXT)).toThrow(/validation/)
+    })
+
+    it('should reject a non-object response', () => {
+      expect(() => task.processOutput('not an object', MOCK_CONTEXT)).toThrow(/validation/)
+      expect(() => task.processOutput(null, MOCK_CONTEXT)).toThrow(/validation/)
+    })
+  })
 })

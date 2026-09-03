@@ -1,8 +1,7 @@
-import type { ContentBlock, TextContent, ToolUseContent } from '@guidemode/types'
-import { isStructuredMessageContent } from '@guidemode/types'
-import { getUserDisplayName } from '../../../../utils/user.js'
+import { z } from 'zod'
 import { BaseModelTask } from '../../../base/model-task.js'
 import type { ModelTaskConfig, ModelTaskContext } from '../../../base/types.js'
+import { buildTaskInput, formatToolUsage } from '../../../condense/index.js'
 
 /**
  * Session Phase Types
@@ -58,7 +57,47 @@ export interface PhaseAnalysisInput {
   sessionDurationMs: number
   phasePattern: string
   transcript: string
+  toolsUsed: string
+  /** Highest original message index, so the model knows the valid range for step numbers. */
+  maxStep: number
 }
+
+const PHASE_TYPES = [
+  'initial_specification',
+  'analysis_planning',
+  'plan_modification',
+  'plan_agreement',
+  'execution',
+  'interruption',
+  'task_assignment',
+  'completion',
+  'correction',
+  'final_completion',
+  'other',
+] as const
+
+const phaseSchema = z.object({
+  // Unknown phase types are coerced to 'other' rather than failing the whole analysis.
+  phaseType: z
+    .string()
+    .transform(v =>
+      PHASE_TYPES.includes(v as SessionPhaseType) ? (v as SessionPhaseType) : 'other'
+    ),
+  startStep: z.number(),
+  endStep: z.number(),
+  stepCount: z.number().optional(),
+  summary: z.string(),
+  durationMs: z.number(),
+  timestamp: z.string().optional(),
+})
+
+const phaseAnalysisSchema = z.object({
+  phases: z.array(phaseSchema),
+  totalPhases: z.number().optional(),
+  totalSteps: z.number().optional(),
+  sessionDurationMs: z.number().optional(),
+  pattern: z.string().optional(),
+})
 
 /**
  * Session Phase Analysis Task
@@ -106,8 +145,21 @@ Session Details:
 Expected Phase Pattern (use this as a guide, but adapt to what actually happened):
 {{phasePattern}}
 
-Full Session Transcript:
+Tools Used: {{toolsUsed}}
+
+Session Transcript (condensed):
 {{transcript}}
+
+HOW TO READ THE TRANSCRIPT:
+- Tool inputs and outputs have been removed and replaced by summary markers such as
+  "[4 tool calls: Read x2, Glob x2]". Treat those markers as execution activity.
+- Every message {{userName}} wrote is present in full, including interruptions
+  (labelled "(interruption)") and slash commands (labelled "(command)").
+- "Step N" is the ORIGINAL message index in the session. Steps are SPARSE: numbers are
+  skipped where messages were condensed away, and "[... N message(s) omitted ...]" marks
+  larger gaps. Step numbers run from 1 to {{maxStep}}.
+- Use the ORIGINAL step numbers shown in the transcript for startStep and endStep. Do NOT
+  renumber them, and do not assume consecutive steps are adjacent in time.
 
 CRITICAL INSTRUCTIONS:
 1. Analyze the ENTIRE transcript above
@@ -196,110 +248,25 @@ Always refer to the person as {{userName}} in your summaries.`,
     }
   }
 
-  /**
-   * Allow custom phase patterns to be configured
-   */
-  setPhasePattern(_pattern: string): void {
-    // This can be used to override the default pattern
-    // For now, we'll keep it simple and use the default
-  }
-
   prepareInput(context: ModelTaskContext): PhaseAnalysisInput {
+    const base = buildTaskInput(context)
     const session = context.session
     if (!session) {
       throw new Error('Session data is required for phase analysis')
     }
 
-    // Get user display name
-    const userName = context.user ? getUserDisplayName(context.user) : 'the user'
-
-    // Build the full transcript with message numbers
-    const transcript = session.messages
-      .map((msg, index) => {
-        const stepNum = index + 1
-        const role = msg.type === 'user' ? userName : 'Assistant'
-        const timestamp = msg.timestamp ? new Date(msg.timestamp).toISOString() : 'unknown'
-
-        // Extract content text
-        let content = ''
-        if (typeof msg.content === 'string') {
-          content = msg.content
-        } else if (isStructuredMessageContent(msg.content)) {
-          content = msg.content.text || ''
-        } else if (Array.isArray(msg.content)) {
-          content = msg.content
-            .filter(
-              (item: ContentBlock): item is TextContent => item.type === 'text' && 'text' in item
-            )
-            .map((item: TextContent) => item.text)
-            .join(' ')
-        }
-
-        // Truncate very long messages but keep important context
-        const maxLength = 1000
-        if (content.length > maxLength) {
-          content = `${content.substring(0, maxLength)}... [truncated]`
-        }
-
-        // Add tool use information for assistant messages
-        let toolInfo = ''
-        if (msg.type === 'assistant') {
-          const toolNames: string[] = []
-
-          // Check structured message content
-          if (isStructuredMessageContent(msg.content)) {
-            // Canonical format - single toolUse
-            if (msg.content.toolUse?.name) {
-              toolNames.push(msg.content.toolUse.name)
-            }
-
-            // Handle old format with toolUses array (during migration)
-            const contentWithToolUses = msg.content as typeof msg.content & {
-              toolUses?: ToolUseContent[]
-            }
-            if (contentWithToolUses.toolUses && Array.isArray(contentWithToolUses.toolUses)) {
-              for (const tool of contentWithToolUses.toolUses) {
-                if (tool.name) {
-                  toolNames.push(tool.name)
-                }
-              }
-            }
-          } else if (Array.isArray(msg.content)) {
-            // Extract tool uses from array format
-            for (const item of msg.content) {
-              if (item.type === 'tool_use' && 'name' in item && item.name) {
-                toolNames.push(item.name as string)
-              }
-            }
-          }
-
-          if (toolNames.length > 0) {
-            toolInfo = `\n  [Tools used: ${toolNames.join(', ')}]`
-          }
-        }
-
-        return `Step ${stepNum} [${timestamp}] - ${role}:\n  ${content}${toolInfo}`
-      })
-      .join('\n\n')
-
-    const durationMinutes = session.duration ? Math.round(session.duration / 60000) : 'Unknown'
-
-    const sessionStart = session.startTime ? new Date(session.startTime).toISOString() : 'Unknown'
-
-    const sessionEnd = session.endTime ? new Date(session.endTime).toISOString() : 'Unknown'
-
-    const sessionDurationMs = session.duration || 0
-
     return {
-      userName,
-      provider: context.provider,
-      durationMinutes,
-      messageCount: session.messages.length,
-      sessionStart,
-      sessionEnd,
-      sessionDurationMs,
+      userName: base.userName,
+      provider: base.provider,
+      durationMinutes: base.durationMinutes,
+      messageCount: base.messageCount,
+      sessionStart: session.startTime ? new Date(session.startTime).toISOString() : 'Unknown',
+      sessionEnd: session.endTime ? new Date(session.endTime).toISOString() : 'Unknown',
+      sessionDurationMs: session.duration || 0,
       phasePattern: this.defaultPattern,
-      transcript,
+      transcript: base.transcript.text || 'No conversation content found',
+      toolsUsed: formatToolUsage(base.transcript),
+      maxStep: base.messageCount,
     }
   }
 
@@ -309,51 +276,43 @@ Always refer to the person as {{userName}} in your summaries.`,
   }
 
   processOutput(output: unknown, context: ModelTaskContext): SessionPhaseAnalysis {
-    // Validate the output structure
-    if (typeof output !== 'object' || output === null) {
-      throw new Error('Phase analysis output must be an object')
+    const parsed = phaseAnalysisSchema.safeParse(output)
+
+    if (!parsed.success) {
+      throw new Error(`Phase analysis output failed validation: ${parsed.error.message}`)
     }
 
-    const result = output as Record<string, unknown>
+    const totalSteps = context.session?.messages.length ?? 0
 
-    if (!Array.isArray(result.phases)) {
-      throw new Error('Phase analysis output must contain a phases array')
-    }
+    // The transcript uses sparse ORIGINAL message indices, so the model can return a step
+    // that does not exist or an inverted range. Clamp rather than discard: the phase
+    // summaries are still useful even when a boundary drifts, and the UI resolves these
+    // indices against the real message list.
+    const clamp = (step: number): number =>
+      totalSteps > 0
+        ? Math.min(Math.max(Math.round(step), 1), totalSteps)
+        : Math.max(1, Math.round(step))
 
-    // Validate each phase
-    for (const phase of result.phases) {
-      if (!phase.phaseType || typeof phase.phaseType !== 'string') {
-        throw new Error('Each phase must have a phaseType string')
-      }
-      if (typeof phase.startStep !== 'number' || typeof phase.endStep !== 'number') {
-        throw new Error('Each phase must have startStep and endStep numbers')
-      }
-      if (phase.startStep > phase.endStep) {
-        throw new Error('Phase startStep must be <= endStep')
-      }
-      if (typeof phase.summary !== 'string') {
-        throw new Error('Each phase must have a summary string')
-      }
-      if (typeof phase.durationMs !== 'number') {
-        throw new Error('Each phase must have a durationMs number')
-      }
-    }
-
-    // Ensure proper structure
-    return {
-      phases: result.phases.map((phase: SessionPhase) => ({
+    const phases: SessionPhase[] = parsed.data.phases.map(phase => {
+      const startStep = clamp(phase.startStep)
+      const endStep = Math.max(startStep, clamp(phase.endStep))
+      return {
         phaseType: phase.phaseType,
-        startStep: phase.startStep,
-        endStep: phase.endStep,
-        stepCount: phase.stepCount || phase.endStep - phase.startStep + 1,
+        startStep,
+        endStep,
+        stepCount: phase.stepCount ?? endStep - startStep + 1,
         summary: phase.summary,
         durationMs: phase.durationMs,
         timestamp: phase.timestamp,
-      })),
-      totalPhases: (result.totalPhases as number) || result.phases.length,
-      totalSteps: (result.totalSteps as number) || context.session?.messages.length || 0,
-      sessionDurationMs: (result.sessionDurationMs as number) || context.session?.duration || 0,
-      pattern: (result.pattern as string) || 'unknown',
+      }
+    })
+
+    return {
+      phases,
+      totalPhases: phases.length,
+      totalSteps: totalSteps || parsed.data.totalSteps || 0,
+      sessionDurationMs: context.session?.duration || parsed.data.sessionDurationMs || 0,
+      pattern: parsed.data.pattern || phases.map(p => p.phaseType).join(' -> ') || 'unknown',
     }
   }
 }

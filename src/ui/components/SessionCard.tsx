@@ -22,6 +22,7 @@ import {
 } from '@heroicons/react/24/outline'
 import type { SessionRating } from '../../utils/rating.js'
 import { RatingBadge } from './RatingBadge.js'
+import { getMetricColor } from './metrics/metricThresholds.js'
 
 interface AgentSession {
   id: string
@@ -390,13 +391,10 @@ function SessionCard({
               <div className="flex items-center gap-1">
                 <span className="hidden md:inline">Quality:</span>
                 <span
-                  className={`font-medium ${
-                    session.aiModelQualityScore >= 80
-                      ? 'text-success'
-                      : session.aiModelQualityScore >= 60
-                        ? 'text-warning'
-                        : 'text-error'
-                  }`}
+                  className={`font-medium ${getMetricColor(
+                    session.aiModelQualityScore,
+                    'ai-model-quality-score'
+                  )}`}
                 >
                   {session.aiModelQualityScore}%
                 </span>

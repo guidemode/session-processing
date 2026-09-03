@@ -1,12 +1,11 @@
-import type { ContentBlock, TextContent } from '@guidemode/types'
-import { isStructuredMessageContent } from '@guidemode/types'
-import { getUserDisplayName } from '../../../../utils/user.js'
+import { z } from 'zod'
 import { BaseModelTask } from '../../../base/model-task.js'
 import type { ModelTaskConfig, ModelTaskContext } from '../../../base/types.js'
+import { buildTaskInput } from '../../../condense/index.js'
 
 export interface IntentExtractionInput {
   userName: string
-  userMessages: string
+  transcript: string
 }
 
 export interface IntentExtractionOutput {
@@ -16,6 +15,31 @@ export interface IntentExtractionOutput {
   challenges?: string[]
   taskType: 'feature_development' | 'bug_fix' | 'refactoring' | 'learning' | 'debugging' | 'other'
 }
+
+const TASK_TYPES = [
+  'feature_development',
+  'bug_fix',
+  'refactoring',
+  'learning',
+  'debugging',
+  'other',
+] as const
+
+const outputSchema = z.object({
+  primaryGoal: z.string().min(1),
+  secondaryGoals: z.array(z.string()).default([]),
+  technologies: z.array(z.string()).default([]),
+  challenges: z.array(z.string()).default([]),
+  // An unrecognised task type is coerced rather than failing the whole extraction.
+  taskType: z
+    .string()
+    .optional()
+    .transform(v =>
+      v && TASK_TYPES.includes(v as IntentExtractionOutput['taskType'])
+        ? (v as IntentExtractionOutput['taskType'])
+        : ('other' as const)
+    ),
+})
 
 /**
  * Intent Extraction Task
@@ -34,10 +58,12 @@ export class IntentExtractionTask extends BaseModelTask<
       taskType: this.taskType,
       prompt: `You are analyzing an AI coding agent session to extract {{userName}}'s intents and goals.
 
-{{userName}}'s Messages:
-{{userMessages}}
+The transcript below is condensed: tool inputs and outputs are replaced by counts, but every message {{userName}} wrote is present in full. Base your answer on what {{userName}} said, using the assistant's replies only as context. Step numbers are the original message indices and are therefore not contiguous.
 
-Analyze these messages and extract:
+Transcript:
+{{transcript}}
+
+Analyze this session and extract:
 1. Primary Goal: What is the main thing {{userName}} wanted to accomplish?
 2. Secondary Goals: What other objectives did {{userName}} have?
 3. Technical Context: What technologies/frameworks were mentioned?
@@ -84,41 +110,11 @@ Respond with a JSON object:
   }
 
   prepareInput(context: ModelTaskContext): IntentExtractionInput {
-    const session = context.session
-    if (!session) {
-      throw new Error('Session data is required for intent extraction')
-    }
-
-    // Get user display name
-    const userName = context.user ? getUserDisplayName(context.user) : 'the user'
-
-    // Extract all user messages - handle both string and structured content
-    const userMessages = session.messages
-      .filter(msg => msg.type === 'user')
-      .map((msg, index) => {
-        let content = ''
-        if (typeof msg.content === 'string') {
-          content = msg.content
-        } else if (isStructuredMessageContent(msg.content)) {
-          // Parser wraps structured content in { text, toolUses, toolResults, structured }
-          content = msg.content.text || ''
-        } else if (Array.isArray(msg.content)) {
-          // Fallback: Extract text from content array (for other providers)
-          content = msg.content
-            .filter(
-              (item: ContentBlock): item is TextContent => item.type === 'text' && 'text' in item
-            )
-            .map((item: TextContent) => item.text)
-            .join(' ')
-        }
-        return `[${index + 1}] ${content}`
-      })
-      .filter(msg => msg.length > 4) // Filter out empty messages (just "[X] ")
-      .join('\n\n')
+    const base = buildTaskInput(context)
 
     return {
-      userName,
-      userMessages: userMessages || 'No user messages found',
+      userName: base.userName,
+      transcript: base.transcript.text || 'No conversation content found',
     }
   }
 
@@ -127,42 +123,37 @@ Respond with a JSON object:
       return false
     }
 
-    // Must have at least one user message
-    const userMessageCount = context.session.messages.filter(msg => msg.type === 'user').length
-    return userMessageCount > 0
+    // Must have at least one message the person actually wrote. The canonical parser
+    // splits those across four types, so filtering on 'user' alone would refuse to run on
+    // sessions that opened with a slash command or consisted only of interruptions.
+    return context.session.messages.some(
+      msg =>
+        msg.type === 'user' ||
+        msg.type === 'user_input' ||
+        msg.type === 'interruption' ||
+        msg.type === 'command' ||
+        msg.type === 'compact'
+    )
   }
 
   processOutput(output: unknown, _context: ModelTaskContext): IntentExtractionOutput {
-    // Validate the output structure
-    if (typeof output !== 'object' || output === null) {
-      throw new Error('Intent extraction output must be an object')
+    const parsed = outputSchema.safeParse(output)
+
+    if (!parsed.success) {
+      throw new Error(`Intent extraction output failed validation: ${parsed.error.message}`)
     }
 
-    const result = output as IntentExtractionOutput
+    // Built field by field rather than returned directly: the CJS build resolves modules
+    // with `moduleResolution: "node"`, under which zod's inferred output type degrades to
+    // all properties optional. An explicit construction is identical under both.
+    const { primaryGoal, secondaryGoals, technologies, challenges, taskType } = parsed.data
 
-    if (!result.primaryGoal || typeof result.primaryGoal !== 'string') {
-      throw new Error('Primary goal is required and must be a string')
-    }
-
-    const validTaskTypes = [
-      'feature_development',
-      'bug_fix',
-      'refactoring',
-      'learning',
-      'debugging',
-      'other',
-    ]
-    if (!result.taskType || !validTaskTypes.includes(result.taskType)) {
-      result.taskType = 'other'
-    }
-
-    // Ensure arrays exist and are arrays
     return {
-      primaryGoal: result.primaryGoal,
-      secondaryGoals: Array.isArray(result.secondaryGoals) ? result.secondaryGoals : [],
-      technologies: Array.isArray(result.technologies) ? result.technologies : [],
-      challenges: Array.isArray(result.challenges) ? result.challenges : [],
-      taskType: result.taskType,
+      primaryGoal,
+      secondaryGoals: secondaryGoals ?? [],
+      technologies: technologies ?? [],
+      challenges: challenges ?? [],
+      taskType: taskType ?? 'other',
     }
   }
 }

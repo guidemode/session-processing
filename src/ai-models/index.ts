@@ -1,3 +1,6 @@
+// Export the shared session condenser
+export * from './condense/index.js'
+
 // Export base classes and types
 export * from './base/index.js'
 
