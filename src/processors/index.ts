@@ -21,4 +21,5 @@ export {
   CanonicalPerformanceProcessor,
   CanonicalErrorProcessor,
   CanonicalContextProcessor,
+  PROCESS_QUALITY_SCORER_VERSION,
 } from './canonical/index.js'

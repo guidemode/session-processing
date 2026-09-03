@@ -13,7 +13,7 @@ import { CanonicalCostProcessor } from './metrics/cost.js'
 import { CanonicalEngagementProcessor } from './metrics/engagement.js'
 import { CanonicalErrorProcessor } from './metrics/error.js'
 import { CanonicalPerformanceProcessor } from './metrics/performance.js'
-import { CanonicalQualityProcessor } from './metrics/quality.js'
+import { CanonicalQualityProcessor, PROCESS_QUALITY_SCORER_VERSION } from './metrics/quality.js'
 import { CanonicalUsageProcessor } from './metrics/usage.js'
 
 export class CanonicalSessionProcessor extends BaseProviderProcessor {
@@ -66,4 +66,5 @@ export {
   CanonicalErrorProcessor,
   CanonicalContextProcessor,
   CanonicalCostProcessor,
+  PROCESS_QUALITY_SCORER_VERSION,
 }
