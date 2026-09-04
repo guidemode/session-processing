@@ -72,7 +72,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.74.0",
     "@google/generative-ai": "^0.21.0",
-    "@guidemode/types": "workspace:*",
+    "@guidemode/types": "^0.2.10",
     "canvas-confetti": "^1.9.4",
     "zod": "^3.25.76"
   },
