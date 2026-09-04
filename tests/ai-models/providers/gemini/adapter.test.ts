@@ -635,7 +635,9 @@ describe('GeminiModelAdapter', () => {
 			const health = await adapter.healthCheck()
 
 			expect(health.healthy).toBe(true)
-			expect(health.latency).toBeGreaterThanOrEqual(50)
+			// 10ms tolerance for JavaScript timing imprecision: `setTimeout(50)` regularly
+			// measures 49ms across `Date.now()`, so asserting the delay exactly is flaky.
+			expect(health.latency).toBeGreaterThanOrEqual(40)
 		})
 
 		it('should track latency even on health check failure', async () => {
@@ -651,7 +653,8 @@ describe('GeminiModelAdapter', () => {
 			const health = await adapter.healthCheck()
 
 			expect(health.healthy).toBe(false)
-			expect(health.latency).toBeGreaterThanOrEqual(30)
+			// Allow 10ms tolerance for JavaScript timing imprecision
+			expect(health.latency).toBeGreaterThanOrEqual(20)
 		})
 	})
 
