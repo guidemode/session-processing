@@ -3,7 +3,7 @@
  * Wrapper for Google's Gemini API (supports Gemini 3 thinking config)
  */
 
-export type GeminiThinkingLevel = 'minimal' | 'low' | 'medium' | 'high'
+export type GeminiThinkingLevel = 'low' | 'medium' | 'high'
 
 export interface GeminiMessage {
   role: 'user' | 'model'
@@ -77,7 +77,7 @@ export class GeminiAPIClient {
 
   constructor(config: GeminiClientConfig) {
     this.apiKey = config.apiKey
-    this.defaultModel = config.model || 'gemini-3.7-flash'
+    this.defaultModel = config.model || 'gemini-3.8-flash'
     this.defaultMaxOutputTokens = config.maxOutputTokens || 8192
     this.defaultTemperature = config.temperature ?? 1.0
     this.defaultThinkingLevel = config.thinkingLevel

@@ -24,7 +24,7 @@ export class GeminiModelAdapter extends BaseModelAdapter {
 
     this.client = new GeminiAPIClient({
       apiKey: config.apiKey,
-      model: config.model || 'gemini-3.7-flash',
+      model: config.model || 'gemini-3.8-flash',
       maxOutputTokens: config.maxTokens || 8192,
       temperature: config.temperature ?? 1.0,
       timeout: config.timeout,
@@ -103,7 +103,7 @@ export class GeminiModelAdapter extends BaseModelAdapter {
         success: true,
         output,
         metadata: {
-          modelUsed: this.config.model || 'gemini-3.7-flash',
+          modelUsed: this.config.model || 'gemini-3.8-flash',
           tokensUsed,
           processingTime,
           cost,
@@ -119,7 +119,7 @@ export class GeminiModelAdapter extends BaseModelAdapter {
         success: false,
         output: null,
         metadata: {
-          modelUsed: this.config.model || 'gemini-3.7-flash',
+          modelUsed: this.config.model || 'gemini-3.8-flash',
           processingTime,
           error: error instanceof Error ? error.message : 'Unknown error',
         },
