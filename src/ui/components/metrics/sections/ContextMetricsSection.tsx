@@ -99,7 +99,7 @@ export function ContextMetricsSection({ context }: ContextMetricsSectionProps) {
 
         {/*
          * Cost is rendered only when there IS one, rather than as a set of "N/A"
-         * cards. Pricing is server-derived and the desktop app has no price table,
+         * cards. Pricing is server-derived, so a client without a price table has none,
          * so an always-present cost row would read as a permanent gap there instead
          * of what it is: a figure that environment does not compute.
          */}

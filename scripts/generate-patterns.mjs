@@ -2,7 +2,7 @@
 /**
  * Generate `src/redaction/patterns.generated.ts` from `patterns.json`.
  *
- * `patterns.json` stays the single source of truth because the Rust desktop app reads the same
+ * `patterns.json` stays the single source of truth because the retired Rust desktop app read the same
  * file. It cannot be imported directly from TypeScript, though: Node's ESM loader requires an
  * `with { type: 'json' }` attribute, and that attribute is rejected by the CommonJS build. Emitting
  * a plain TypeScript module sidesteps both.

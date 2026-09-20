@@ -6,7 +6,7 @@
  * notable events are always spans of exactly one message.
  *
  * This model sits *alongside* `TimelineItem`, deliberately not inside it:
- * `TimelineItem` is a message-level type consumed by token extraction and the desktop
+ * `TimelineItem` is a message-level type consumed by token extraction and the retired desktop
  * app, and widening its union would force every exhaustive switch to handle a case it
  * cannot render.
  *

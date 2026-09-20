@@ -129,7 +129,7 @@ pnpm --filter @guidemode/session-processing build
 pnpm --filter @guidemode/session-processing test
 ```
 
-**Remember**: After building this package, rebuild dependent packages (server, desktop) that import it.
+**Remember**: After building this package, rebuild dependent packages (server, cli) that import it.
 
 ---
 
@@ -141,7 +141,7 @@ pnpm --filter @guidemode/session-processing test
 
 **Location:** `src/parsers/canonical/parser.ts`
 
-The canonical parser handles all providers (Claude Code, Gemini, Copilot, Codex, OpenCode) using the universal canonical JSONL format produced by the Rust desktop app. This major simplification replaced individual parser implementations with one unified parser.
+The canonical parser handles all providers using the universal canonical JSONL format produced by the CLI. This major simplification replaced individual parser implementations with one unified parser. Sessions from providers the CLI does not yet support (Gemini, Copilot, OpenCode) exist from the retired desktop app and parse identically.
 
 **Key Benefits:**
 - One parser instead of 5+ provider parsers
@@ -260,7 +260,7 @@ All providers are processed uniformly with provider-specific adaptations in the 
 
 To support a new provider:
 
-1. **Rust converter** (desktop app) - Implements `ToCanonical` trait
+1. **Converter** (the CLI) - Converts the provider's native format to canonical
 2. **Registry alias** (here) - Add to `providerAliases` array
 
 **That's it!** The canonical parser automatically handles the new provider.
@@ -447,10 +447,6 @@ const phaseColors = {
 
 **Server (PostgreSQL):**
 - Column: `ai_model_phase_analysis` (JSONB)
-- Stored in `agent_sessions` table
-
-**Desktop (SQLite):**
-- Column: `ai_model_phase_analysis` (TEXT with JSON mode)
 - Stored in `agent_sessions` table
 
 ### Usage Example

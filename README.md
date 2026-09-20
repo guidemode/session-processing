@@ -94,7 +94,7 @@ pnpm build
 
 ## Related Packages
 
-- [@guidemode/desktop](https://github.com/guidemode/desktop) - Converts provider formats to canonical
+- [guidemode](https://github.com/guidemode/cli) - Converts provider formats to canonical
 - [@guidemode/types](https://github.com/guidemode/types) - Shared type definitions
 
 ## License
@@ -104,5 +104,5 @@ MIT License - see [LICENSE](LICENSE)
 ## Support
 
 - 💬 [**Discussions**](https://github.com/orgs/guidemode/discussions) - Ask questions, share ideas
-- 🐛 [**Issues**](https://github.com/guidemode/desktop/issues) - Report bugs, request features
+- 🐛 [**Issues**](https://github.com/guidemode/cli/issues) - Report bugs, request features
 - 📧 **Email**: support@guidemode.dev

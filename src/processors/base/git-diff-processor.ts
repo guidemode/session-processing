@@ -10,7 +10,7 @@ import type { ParsedSession } from './types.js'
  * - Core diff metrics (files, lines added/removed)
  * - Efficiency ratios (lines read per changed, reads per file, etc.)
  *
- * Desktop-only: Returns null if no git diff data available
+ * Legacy desktop uploads only: returns null if no git diff data available
  */
 export class GitDiffMetricProcessor extends BaseMetricProcessor {
   readonly name = 'git-diff'
@@ -34,7 +34,7 @@ export class GitDiffMetricProcessor extends BaseMetricProcessor {
     session: ParsedSession,
     existingMetrics?: Record<string, unknown>
   ): Promise<GitDiffMetrics> {
-    // Check if git diff data is available (desktop only)
+    // Check if git diff data is available (legacy desktop uploads only)
     const gitDiff = session.metadata?.gitDiff as GitDiff | undefined
     if (!gitDiff || !gitDiff.files) {
       // Return empty metrics if no git data (server sessions)

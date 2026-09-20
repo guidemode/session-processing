@@ -85,10 +85,10 @@ export interface SessionMetricsUI {
      *
      * A `numeric` column, so it arrives as a STRING; parse before formatting.
      *
-     * ABSENT ON DESKTOP, permanently and by design: pricing needs a price table and
-     * a database the desktop app does not have. Every consumer must treat undefined
-     * as "not priced here" rather than as zero — the tiles below render nothing at
-     * all in that case, which is why desktop shows no cost rather than "$0.00".
+     * MAY BE ABSENT, by design: pricing needs a price table and a database, so any
+     * client rendering without one has no cost to show. Every consumer must treat
+     * undefined as "not priced here" rather than as zero — the tiles below render
+     * nothing at all in that case, rather than "$0.00".
      */
     apiEquivalentCostUsd?: string | null
     /** `derived` | `derived_partial` | `unavailable` | `pending`. */

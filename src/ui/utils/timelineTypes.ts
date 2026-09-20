@@ -129,8 +129,9 @@ export interface TimelineMessage {
  * Grouped timeline messages (e.g., tool use + result displayed side-by-side)
  *
  * @deprecated The condensed transcript derives its own spans (see `utils/transcript`)
- * and never produces groups. Still used by the desktop ActiveSessionCard; scheduled for
- * removal once that migrates.
+ * and never produces groups. Its last consumer was the desktop ActiveSessionCard, which
+ * is gone, so this is now removable — it is still exported and still reached by
+ * `extractTokens` and `BaseMessageProcessor`, so unpicking it is its own change.
  */
 export interface TimelineGroup {
   id: string

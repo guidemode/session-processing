@@ -37,7 +37,8 @@ export type SpanTone = SpanKind | 'error'
  *
  * Transcript content is a dense scanning surface, not an article: default heading
  * sizes make a plan or a long prompt dominate the page. These are arbitrary variants
- * rather than CSS so `index.css` stays byte-identical between server and desktop.
+ * rather than CSS. That was originally to keep `index.css` byte-identical between the
+ * server and the desktop app; the desktop app is gone, so these could now move into CSS.
  */
 export const TRANSCRIPT_PROSE = [
   'text-sm leading-relaxed',

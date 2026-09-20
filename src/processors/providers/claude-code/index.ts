@@ -58,7 +58,7 @@ export class ClaudeCodeProcessor extends BaseProviderProcessor {
   ): Promise<ProcessorResult[]> {
     const session = this.parseSession(jsonlContent, context.provider)
 
-    // Attach git diff data from context if available (desktop only)
+    // Attach git diff data from context if available (legacy desktop uploads only)
     if (context.gitDiffData) {
       session.metadata = {
         ...session.metadata,

@@ -2,7 +2,7 @@
  * SessionDetailHeader - Shared session detail header component
  *
  * Displays session metadata, stats, and action buttons for session detail pages.
- * Used by both desktop and server apps for consistent UI.
+ * Used by the server UI. Some props exist only for the retired desktop app.
  */
 
 import { buildGitHubDiffUrl } from '../../utils/git-url.js'
@@ -24,7 +24,7 @@ export interface SessionDetailHeaderProps {
       gitRemoteUrl?: string
       cwd?: string
     }
-    cwd?: string // For desktop (direct cwd field)
+    cwd?: string // Retired desktop app (direct cwd field)
     aiModelSummary?: string
     gitBranch?: string
     firstCommitHash?: string
@@ -42,8 +42,8 @@ export interface SessionDetailHeaderProps {
   onProcessSession?: () => void
   onAssessSession?: () => void
   onDeleteSession?: () => void
-  onCwdClick?: (path: string) => void | Promise<void> // Desktop only
-  onViewDiff?: () => void | Promise<void> // Desktop only - opens Session Changes tab
+  onCwdClick?: (path: string) => void | Promise<void> // Retired desktop app only
+  onViewDiff?: () => void | Promise<void> // Retired desktop app only - opened Session Changes tab
   onRepositoryClick?: () => void | Promise<void> // Optional click handler for repository name
 
   // Status states
@@ -57,7 +57,7 @@ export interface SessionDetailHeaderProps {
     percentage: number
   } | null
 
-  // Desktop-specific sync status
+  // Sync status, from the retired desktop app
   syncStatus?: {
     synced: boolean
     failed: boolean
@@ -194,7 +194,7 @@ export function SessionDetailHeader({
                 )}
               </span>
 
-              {/* Sync Status Icon (desktop only) */}
+              {/* Sync Status Icon (retired desktop app only) */}
               {syncStatus && (
                 <>
                   <span className="text-base-content/50 text-sm">•</span>
@@ -259,7 +259,7 @@ export function SessionDetailHeader({
               )}
             </div>
 
-            {/* Right: Action Buttons (desktop only) */}
+            {/* Right: Action Buttons (retired desktop app only) */}
             <div className="hidden md:flex items-center gap-1.5 flex-shrink-0">
               {onProcessSession && (
                 <button
