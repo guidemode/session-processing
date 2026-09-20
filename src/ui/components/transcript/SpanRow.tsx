@@ -11,7 +11,7 @@ interface SpanRowProps {
   spanId: string
   kind: string
   tone: SpanTone
-  /** Index range shown in the gutter, e.g. `16-19`. */
+  /** The span's position, shown in the gutter. */
   range: string
   Icon: React.ComponentType<{ className?: string }>
   /** Anchor for deep links that target a specific message. */
@@ -27,7 +27,7 @@ export function SpanRow({ spanId, kind, tone, range, Icon, messageId, children }
       data-span-id={spanId}
       data-span-kind={kind}
       data-message-id={messageId}
-      className={`grid grid-cols-[3rem_auto_minmax(0,1fr)] items-start gap-x-2 gap-y-1
+      className={`grid grid-cols-[2.25rem_auto_minmax(0,1fr)] items-start gap-x-2 gap-y-1
         border-b border-base-200 py-2 pl-1 pr-4 last:border-b-0`}
     >
       <span className="pt-1.5 text-right font-mono text-[11px] text-base-content/35 tabular-nums">

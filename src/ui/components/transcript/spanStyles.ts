@@ -15,6 +15,7 @@ import {
   ExclamationTriangleIcon,
   EyeIcon,
   GlobeAltIcon,
+  LightBulbIcon,
   ListBulletIcon,
   MagnifyingGlassIcon,
   MapIcon,
@@ -53,6 +54,17 @@ export const TRANSCRIPT_PROSE = [
   '[&_blockquote]:my-1 [&_blockquote]:pl-2 [&_blockquote]:border-l-2',
   '[&_blockquote]:border-base-300 [&_blockquote]:text-base-content/70',
   '[&_hr]:my-2',
+].join(' ')
+
+/**
+ * Thinking is reasoning, not a statement to the user, so it is rendered quieter than the turn it
+ * belongs to. Codex writes its reasoning summaries as a bold markdown heading, which would
+ * otherwise make the least important row on the page the loudest.
+ */
+export const THINKING_PROSE = [
+  'text-base-content/55 italic',
+  '[&_strong]:font-medium [&_strong]:text-base-content/70',
+  '[&_h1]:font-medium [&_h2]:font-medium [&_h3]:font-medium [&_h4]:font-medium',
 ].join(' ')
 
 export interface SpanStyle {
@@ -116,6 +128,9 @@ export const SPAN_STYLES: Record<SpanTone, SpanStyle> = {
 export const LEGEND_TONES: SpanTone[] = ['human', 'assistant', 'tools', 'error', 'meta']
 
 type Icon = React.ComponentType<{ className?: string }>
+
+/** Thinking shares the assistant tone but not its icon: it is a different kind of row. */
+export const THINKING_ICON: Icon = LightBulbIcon
 
 export const SPAN_ICONS: Record<SpanKind, Icon> = {
   human: UserIcon,

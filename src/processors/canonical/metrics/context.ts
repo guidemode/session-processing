@@ -34,6 +34,23 @@ export class CanonicalContextProcessor extends BaseMetricProcessor {
   private readonly CONTEXT_WINDOW_SIZE = 200000
 
   /**
+   * The window the provider itself stated, if it did.
+   *
+   * Codex writes `model_context_window` on every token_count record. It outranks the default
+   * above and is not overridden downstream, because a figure the provider published for the
+   * model that actually ran beats one looked up by name — and it is the only window available
+   * at all for a model the price table does not carry.
+   */
+  private declaredWindow(session: ParsedSession): number | null {
+    for (const message of session.messages) {
+      const declared = (message.metadata?.providerMetadata as Record<string, unknown> | undefined)
+        ?.model_context_window
+      if (typeof declared === 'number' && declared > 0) return declared
+    }
+    return null
+  }
+
+  /**
    * Check if session has token data (required for context metrics)
    */
   canProcess(session: ParsedSession): boolean {
@@ -51,7 +68,8 @@ export class CanonicalContextProcessor extends BaseMetricProcessor {
     const avgTokensPerMessage = this.calculateAvgTokensPerMessage(session)
 
     // Calculate context utilization
-    const contextUtilization = (totals.contextLength / this.CONTEXT_WINDOW_SIZE) * 100
+    const windowSize = this.declaredWindow(session) ?? this.CONTEXT_WINDOW_SIZE
+    const contextUtilization = (totals.contextLength / windowSize) * 100
 
     // Generate improvement tips
     const improvementTips = this.generateImprovementTips(compactEvents, totals, contextUtilization)
@@ -62,7 +80,7 @@ export class CanonicalContextProcessor extends BaseMetricProcessor {
       total_cache_created: totals.totalCacheCreated,
       total_cache_read: totals.totalCacheRead,
       context_length: totals.contextLength,
-      context_window_size: this.CONTEXT_WINDOW_SIZE,
+      context_window_size: windowSize,
       context_utilization_percent: contextUtilization,
       compact_event_count: compactEvents.count,
       compact_event_steps: JSON.stringify(compactEvents.steps),

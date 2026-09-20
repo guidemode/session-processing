@@ -349,3 +349,47 @@ describe('attributeTokens — cache TTL split', () => {
     expect(result.models[0].cacheCreation1hTokens).toBe(100)
   })
 })
+
+describe('attributeTokens and the <synthetic> marker', () => {
+  it('does not treat <synthetic> as a model', () => {
+    // Claude Code writes `<synthetic>` on messages it generated itself — an interruption
+    // notice, an API error line — with an all-zero usage block. Attributing it produces an
+    // entry pricing cannot resolve, which falsely marks a complete cost as a floor.
+    const result = attributeTokens(
+      session([
+        message('m1', { model: 'claude-opus-5', requestId: 'r1', usage: { input: 100, output: 50 } }),
+        message('m2', {
+          model: '<synthetic>',
+          requestId: 'r2',
+          usage: { input: 0, output: 0, cacheRead: 0, cacheCreation: 0 },
+        }),
+      ])
+    )
+
+    expect(result.models.map(m => m.model)).toEqual(['claude-opus-5'])
+    expect(result.distinctModelCount).toBe(1)
+    expect(result.totals.inputTokens).toBe(100)
+    expect(result.totals.outputTokens).toBe(50)
+  })
+
+  it('drops <synthetic> from the provider summary record too', () => {
+    const result = attributeTokens(
+      session([], {
+        modelUsage: [
+          providerModel('claude-opus-5', { input: 100, output: 50 }),
+          providerModel('<synthetic>'),
+        ],
+      })
+    )
+
+    expect(result.models.map(m => m.model)).toEqual(['claude-opus-5'])
+  })
+
+  it('still reports a genuinely unknown model, which is a real coverage gap', () => {
+    const result = attributeTokens(
+      session([message('m1', { requestId: 'r1', usage: { input: 100, output: 50 } })])
+    )
+
+    expect(result.models.map(m => m.model)).toEqual(['unknown'])
+  })
+})

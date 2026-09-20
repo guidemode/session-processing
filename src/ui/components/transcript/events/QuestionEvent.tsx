@@ -1,7 +1,13 @@
 /**
  * A question put to the user, with the option they picked highlighted.
+ *
+ * Rendered as the multiple choice it was: every option carries a marker, and the chosen one is
+ * ticked. Colour alone did the work before, which says "this one is different" without saying
+ * that the others were offered and declined — and says nothing at all to a reader who cannot
+ * separate the two greens.
  */
 
+import { CheckCircleIcon } from '@heroicons/react/24/solid'
 import type { QuestionPayload } from '../../../utils/transcript/spanTypes.js'
 
 interface QuestionEventProps {
@@ -20,7 +26,7 @@ export function QuestionEvent({ payload }: QuestionEventProps) {
   return (
     <div className="mt-1 grid gap-2">
       {payload.questions.map(entry => (
-        <div key={entry.question} className="rounded border border-info/40 bg-info/10 px-2 py-1.5">
+        <div key={entry.question} className="rounded border border-info/40 bg-info/10 p-2.5">
           <div className="flex flex-wrap items-baseline gap-2">
             {entry.header && <span className="badge badge-ghost badge-xs">{entry.header}</span>}
             <span className="text-sm font-medium">{entry.question}</span>
@@ -29,18 +35,40 @@ export function QuestionEvent({ payload }: QuestionEventProps) {
             )}
           </div>
 
-          <div className="mt-1 grid gap-1 sm:grid-cols-2">
+          {/* One column, always. Options are a list to read down, and two columns put the
+              third one under the first — so the reading order stopped matching the order the
+              options were offered in. */}
+          <div className="mt-2 grid gap-1.5">
             {entry.options.map(option => (
               <div
                 key={option.label}
-                className={`rounded px-1.5 py-1 text-xs ${
-                  option.chosen ? 'bg-success/20 text-base-content' : 'bg-base-200'
+                className={`grid grid-cols-[auto_minmax(0,1fr)] items-start gap-2 rounded border px-2.5 py-2 text-xs ${
+                  option.chosen
+                    ? 'border-success/50 bg-success/15 text-base-content'
+                    : 'border-base-300 bg-base-100/60 text-base-content/70'
                 }`}
               >
-                <div className="font-medium">{option.label}</div>
-                {option.description && (
-                  <div className="text-base-content/60">{option.description}</div>
+                {option.chosen ? (
+                  <CheckCircleIcon className="mt-px h-4 w-4 shrink-0 text-success" />
+                ) : (
+                  // A ring rather than an icon: an empty marker should read as "not this one"
+                  // without drawing the eye the way a second glyph would.
+                  <span
+                    className="mt-0.5 h-3.5 w-3.5 shrink-0 rounded-full border border-base-content/25"
+                    aria-hidden="true"
+                  />
                 )}
+                <div>
+                  <div className="font-medium">
+                    {option.label}
+                    {option.chosen && <span className="sr-only"> (chosen)</span>}
+                  </div>
+                  {option.description && (
+                    <div className="mt-0.5 leading-relaxed text-base-content/60">
+                      {option.description}
+                    </div>
+                  )}
+                </div>
               </div>
             ))}
           </div>

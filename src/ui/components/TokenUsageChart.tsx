@@ -28,6 +28,7 @@ import {
   formatForRecharts,
 } from '../utils/extractTokens.js'
 import type { TimelineItem } from '../utils/timelineTypes.js'
+import { DEFAULT_CONTEXT_WINDOW } from './transcript/useTranscriptModel.js'
 
 export interface TokenUsageChartProps {
   /** Timeline items (filtered by current transcript filters) */
@@ -35,6 +36,19 @@ export interface TokenUsageChartProps {
 
   /** Callback to scroll to a specific message */
   onMessageClick?: (messageId: string) => void
+
+  /**
+   * The model's real context window. Falls back to 200k only when the session's metrics do not
+   * carry one — no current Claude or Codex model is actually limited to that.
+   */
+  contextWindowSize?: number | null
+}
+
+/** Rendered as "200k", "1m" — the axis labels have to track whatever window is in force. */
+function formatWindow(tokens: number): string {
+  return tokens >= 1_000_000
+    ? `${(tokens / 1_000_000).toFixed(tokens % 1_000_000 === 0 ? 0 : 1)}m`
+    : `${Math.round(tokens / 1000)}k`
 }
 
 /**
@@ -83,7 +97,11 @@ const CHART_COLORS = {
   cacheRead: '#f59e0b', // Amber/orange - for cache reads line
 }
 
-export function TokenUsageChart({ items, onMessageClick }: TokenUsageChartProps) {
+export function TokenUsageChart({
+  items,
+  onMessageClick,
+  contextWindowSize: contextWindowProp,
+}: TokenUsageChartProps) {
   // Calculate per-message data with cumulative cache reads for the line
   const chartData = useMemo(() => {
     const perMessage = calculatePerMessageTokens(items)
@@ -163,9 +181,9 @@ export function TokenUsageChart({ items, onMessageClick }: TokenUsageChartProps)
 
   // Right Y-axis (line) - cumulative cache (uses same formula)
   const { ticks: cacheYTicks, domain: cacheYDomain } = calculateAxisScale(maxCacheTokens)
-  const showReferenceLine = maxCacheTokens > 150000
+  const showReferenceLine = maxCacheTokens > (contextWindowProp || DEFAULT_CONTEXT_WINDOW) * 0.75
 
-  const contextWindowSize = 200000 // Claude Sonnet 4.5 context window
+  const contextWindowSize = contextWindowProp || DEFAULT_CONTEXT_WINDOW
   const contextPercent = Math.min((currentContextLength / contextWindowSize) * 100, 100)
   const contextColor = getContextColor(currentContextLength)
 
@@ -218,16 +236,16 @@ export function TokenUsageChart({ items, onMessageClick }: TokenUsageChartProps)
 
               <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(0,0,0,0.1)' }} />
 
-              {/* 200k reference line on right axis - only when nearing limit */}
+              {/* Context-window reference line on right axis - only when nearing the limit */}
               {showReferenceLine && (
                 <ReferenceLine
                   yAxisId="right"
-                  y={200000}
+                  y={contextWindowSize}
                   stroke={CHART_COLORS.cacheRead}
                   strokeDasharray="3 3"
                   strokeOpacity={0.3}
                   label={{
-                    value: '200k',
+                    value: formatWindow(contextWindowSize),
                     position: 'right',
                     fontSize: 10,
                     fill: CHART_COLORS.cacheRead,
@@ -338,7 +356,8 @@ export function TokenUsageChart({ items, onMessageClick }: TokenUsageChartProps)
             <div className="flex justify-between items-center text-xs">
               <span className="text-base-content/60">Cached Context</span>
               <span className="font-semibold" style={{ color: contextColor }}>
-                {(currentContextLength / 1000).toFixed(0)}k / 200k ({contextPercent.toFixed(0)}%)
+                {(currentContextLength / 1000).toFixed(0)}k / {formatWindow(contextWindowSize)} (
+                {contextPercent.toFixed(0)}%)
               </span>
             </div>
 
@@ -360,9 +379,9 @@ export function TokenUsageChart({ items, onMessageClick }: TokenUsageChartProps)
             {/* Threshold Labels */}
             <div className="flex justify-between text-xs text-base-content/40">
               <span>0k</span>
-              <span>100k</span>
-              <span>150k</span>
-              <span>200k</span>
+              <span>{formatWindow(contextWindowSize / 2)}</span>
+              <span>{formatWindow((contextWindowSize * 3) / 4)}</span>
+              <span>{formatWindow(contextWindowSize)}</span>
             </div>
           </div>
         </div>

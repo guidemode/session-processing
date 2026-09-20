@@ -35,6 +35,26 @@ export interface TranscriptModelResult {
   summary: TranscriptSummary
   totalSpans: number
   peakContextTokens: number | null
+  /** Context occupancy over the session, downsampled for the header sparkline. */
+  contextSeries: number[]
+}
+
+/**
+ * Enough points to show the shape of a session — where it grew, where a compaction dropped it —
+ * in a strip a couple of centimetres wide. More would be invisible.
+ */
+const SPARK_POINTS = 48
+
+/** Peak per bucket, not mean: a sparkline of context has to show the spikes. */
+function downsample(values: number[], points: number): number[] {
+  if (values.length <= points) return values
+  const size = values.length / points
+  const out: number[] = []
+  for (let i = 0; i < points; i++) {
+    const slice = values.slice(Math.floor(i * size), Math.floor((i + 1) * size))
+    if (slice.length > 0) out.push(Math.max(...slice))
+  }
+  return out
 }
 
 const EMPTY_SUMMARY: TranscriptSummary = {
@@ -77,12 +97,19 @@ export function useTranscriptModel({
 
       // Peak cached context across the session — what the token chart's gauge showed.
       let peak = 0
+      const series: number[] = []
       for (const message of normalized) {
         const { cacheRead, input } = extractMessageTokens(message)
-        peak = Math.max(peak, cacheRead + input)
+        const occupancy = cacheRead + input
+        peak = Math.max(peak, occupancy)
+        if (occupancy > 0) series.push(occupancy)
       }
 
-      return { normalized, peakContextTokens: peak > 0 ? peak : null }
+      return {
+        normalized,
+        peakContextTokens: peak > 0 ? peak : null,
+        contextSeries: downsample(series, SPARK_POINTS),
+      }
     } catch (error) {
       console.warn('Failed to parse session content:', error)
       return null
@@ -110,6 +137,7 @@ export function useTranscriptModel({
       summary: EMPTY_SUMMARY,
       totalSpans: 0,
       peakContextTokens: null,
+      contextSeries: [],
     }
   }
 
@@ -119,5 +147,6 @@ export function useTranscriptModel({
     summary: model.summary,
     totalSpans: model.spans.length,
     peakContextTokens: derived.peakContextTokens,
+    contextSeries: derived.contextSeries,
   }
 }

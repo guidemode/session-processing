@@ -93,6 +93,23 @@ export interface TokenAttribution {
 
 const UNKNOWN_MODEL = 'unknown'
 
+/**
+ * Claude Code's marker for a message it wrote itself — an interruption notice, an API error
+ * line — rather than one the API returned. It is not a model: its usage block is all zeros,
+ * and no price list will ever hold a row for it.
+ *
+ * Left in, it becomes an entry in `model_usage` that pricing cannot resolve, which sets
+ * `cost_has_unpriced_models` and makes the UI report "Cost is a floor: no price is held for
+ * <synthetic>" on a session whose cost is in fact complete. That warning exists to say real
+ * spend is missing from the number; spending it on zero tokens is how it stops being believed.
+ */
+const SYNTHETIC_MODEL = '<synthetic>'
+
+/** Models that name something other than an API call, and so are never attributed or priced. */
+function isRealModel(model: string | undefined): boolean {
+  return model !== undefined && model !== SYNTHETIC_MODEL
+}
+
 function emptyTotals(): TokenTotals {
   return {
     inputTokens: 0,
@@ -183,6 +200,7 @@ function observed1hByBaseModel(session: ParsedSession): Map<string, number> {
     if (seenRequests.has(key)) continue
     seenRequests.add(key)
 
+    if (message.metadata?.model === SYNTHETIC_MODEL) continue
     const model =
       typeof message.metadata?.model === 'string' && message.metadata.model.length > 0
         ? baseModelName(message.metadata.model)
@@ -246,7 +264,7 @@ function applyObserved1hTokens(models: ModelTokenUsage[], observed: Map<string, 
  * and the totals from per-message usage.
  */
 export function attributeTokens(session: ParsedSession): TokenAttribution {
-  const providerModels = session.providerTotals?.modelUsage
+  const providerModels = session.providerTotals?.modelUsage?.filter(m => isRealModel(m.model))
   if (providerModels && providerModels.length > 0) {
     const models: ModelTokenUsage[] = providerModels.map(m => ({
       model: m.model,
@@ -297,6 +315,8 @@ function attributeFromMessages(session: ParsedSession): TokenAttribution {
   for (const message of session.messages) {
     const usage = readUsage(message)
     if (!usage) continue
+    // Not an API call, so it is neither a request to count nor a model to price.
+    if (message.metadata?.model === SYNTHETIC_MODEL) continue
 
     const key = requestKey(message)
     if (seenRequests.has(key)) {

@@ -2,7 +2,17 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { deriveSpans } from '../../../src/ui/utils/transcript/deriveSpans.js'
 import { prefilterMessages, projectSpans } from '../../../src/ui/utils/transcript/filterSpans.js'
 import { isToolSpan } from '../../../src/ui/utils/transcript/spanTypes.js'
-import { assistant, at, human, meta, normalize, resetIds, thinking, toolPair } from './fixtures/messages.js'
+import {
+  assistant,
+  at,
+  human,
+  interruption,
+  meta,
+  normalize,
+  resetIds,
+  thinking,
+  toolPair,
+} from './fixtures/messages.js'
 
 beforeEach(resetIds)
 
@@ -84,5 +94,53 @@ describe('projectSpans', () => {
 
   it('returns nothing when the search matches nothing', () => {
     expect(projectSpans(build(), { messageFilter: 'all', searchQuery: 'zzzz' })).toEqual([])
+  })
+})
+
+describe('projectSpans under events-only', () => {
+  it('carries in the steer that followed an interruption', () => {
+    // An interruption on its own says only that the run was stopped. The prompt that followed
+    // is the reason, and it is a human span the filter would otherwise drop.
+    const spans = deriveSpans(
+      normalize([
+        human('go', at(0)),
+        assistant('working', at(1)),
+        interruption(at(2)),
+        human('no, do it the other way', at(3)),
+        assistant('understood', at(4)),
+      ])
+    ).spans
+
+    const projected = projectSpans(spans, { messageFilter: 'events-only', searchQuery: '' })
+
+    expect(projected.map(p => p.span.kind)).toEqual(['event', 'human'])
+  })
+
+  it('does not attach a prompt that belongs to a later event', () => {
+    // Stopped, then never steered: the next human turn follows the second interruption and is
+    // that one's steer, not this one's.
+    const spans = deriveSpans(
+      normalize([
+        human('go', at(0)),
+        interruption(at(1)),
+        interruption(at(2)),
+        human('try again', at(3)),
+      ])
+    ).spans
+
+    const projected = projectSpans(spans, { messageFilter: 'events-only', searchQuery: '' })
+    const humans = projected.filter(p => p.span.kind === 'human')
+
+    expect(humans).toHaveLength(1)
+  })
+
+  it('leaves the other kind filters alone', () => {
+    const spans = deriveSpans(
+      normalize([interruption(at(0)), human('steer', at(1)), assistant('ok', at(2))])
+    ).spans
+
+    expect(
+      projectSpans(spans, { messageFilter: 'assistant-only', searchQuery: '' }).map(p => p.span.kind)
+    ).toEqual(['assistant'])
   })
 })

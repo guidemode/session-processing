@@ -24,6 +24,13 @@ interface TranscriptListProps {
   reverseOrder: boolean
   peakContextTokens: number | null
   contextWindow: number
+  /** Context occupancy over the session, for the header sparkline. */
+  contextSeries?: number[]
+  /** The filter in force, and how to change it, for the clickable counters. */
+  messageFilter?: string
+  onFilterChange?: (filter: string) => void
+  /** Only used to tell one projection from another, for scroll anchoring. */
+  searchQuery?: string
   /** Exposed so the page can deep-link into the transcript from elsewhere. */
   onAnchorReady?: (scrollToMessage: (messageId: string) => void) => void
 }
@@ -40,9 +47,15 @@ function timeLabel(timestamp: string): string {
 }
 
 /** The gutter range, e.g. `16` or `16-19`. Always chronological indices. */
+/**
+ * The span's position, and nothing else.
+ *
+ * It used to append the number of records the span collapsed (`71 ·36`), which every span
+ * already states in its own body — "18 exec calls", "2 tool calls" — and which cost the gutter
+ * enough width for a second figure on every row.
+ */
 function rangeLabel(span: TranscriptSpan): string {
-  const count = span.messageIds.length
-  return count <= 1 ? String(span.index + 1) : `${span.index + 1} ·${count}`
+  return String(span.index + 1)
 }
 
 /** First line of a human turn, previewed after an interruption. */
@@ -61,10 +74,20 @@ export function TranscriptList({
   reverseOrder,
   peakContextTokens,
   contextWindow,
+  contextSeries,
+  messageFilter,
+  onFilterChange,
+  searchQuery,
 }: TranscriptListProps) {
   const spans = useMemo(() => projected.map(entry => entry.span), [projected])
   const { revealMessageId, scrollToSpan } = useTranscriptAnchoring(spans)
-  useScrollAnchoring(projected.length, reverseOrder)
+  // Keyed on what is being shown, not how much of it: clearing a filter is a new list, and
+  // must not be mistaken for a live session appending rows.
+  useScrollAnchoring(
+    projected.length,
+    reverseOrder,
+    `${messageFilter ?? 'all'}|${searchQuery ?? ''}`
+  )
 
   // The single point where display order is applied.
   const ordered = reverseOrder ? [...projected].reverse() : projected
@@ -75,6 +98,9 @@ export function TranscriptList({
         summary={summary}
         peakContextTokens={peakContextTokens}
         contextWindow={contextWindow}
+        contextSeries={contextSeries}
+        messageFilter={messageFilter}
+        onFilterChange={onFilterChange}
         narrowing={{ shown: projected.length, total: totalSpans }}
         onSelectSpan={scrollToSpan}
       />

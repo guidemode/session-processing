@@ -74,12 +74,31 @@ export interface ProjectedSpan {
   matchedMessageIds: string[]
 }
 
-const ROLE_FILTERS = new Set(['user-assistant', 'assistant-only', 'user-only'])
+/**
+ * Filters that select whole spans by what they are, as opposed to by tool name.
+ *
+ * The header counters toggle these, so every counter that can be clicked needs one — which is
+ * why `tools-only`, `events-only` and `errors-only` exist alongside the three role filters the
+ * dropdown has always offered.
+ */
+const ROLE_FILTERS = new Set([
+  'user-assistant',
+  'assistant-only',
+  'user-only',
+  'tools-only',
+  'events-only',
+  'errors-only',
+])
 
 function matchesRoleFilter(span: TranscriptSpan, filter: string): boolean {
   // Role filters are about the conversation, so tool and metadata spans drop out.
   if (filter === 'user-only') return span.kind === 'human'
   if (filter === 'assistant-only') return span.kind === 'assistant'
+  if (filter === 'tools-only') return span.kind === 'tools'
+  if (filter === 'events-only') return span.kind === 'event'
+  // A failed call lives inside a tool span, so this selects the spans holding one. The calls
+  // themselves are narrowed below, so the span opens on the failure rather than on its first call.
+  if (filter === 'errors-only') return span.kind === 'tools' && span.stats.errorCount > 0
   return span.kind === 'human' || span.kind === 'assistant' || span.kind === 'event'
 }
 
@@ -110,6 +129,37 @@ function spanMessages(span: TranscriptSpan): TimelineMessage[] {
   }
 }
 
+/**
+ * The human turn that answered an interruption.
+ *
+ * An interruption on its own records only that the run was stopped; what makes it worth reading
+ * is the steer that followed, and under `events-only` that turn is filtered out — leaving four
+ * rows all saying "Interrupted by user" and nothing about why. So the steer is carried in with
+ * its interruption.
+ *
+ * The search stops at the next event as well as at the first human turn: if a run was stopped
+ * and never steered, the next prompt belongs to whatever came after, not to this interruption.
+ */
+function steerSpanIds(spans: TranscriptSpan[]): Set<string> {
+  const ids = new Set<string>()
+
+  for (let i = 0; i < spans.length; i++) {
+    const span = spans[i]
+    if (span.kind !== 'event' || span.eventKind !== 'interruption') continue
+
+    for (let j = i + 1; j < spans.length; j++) {
+      const candidate = spans[j]
+      if (candidate.kind === 'event') break
+      if (candidate.kind === 'human') {
+        ids.add(candidate.id)
+        break
+      }
+    }
+  }
+
+  return ids
+}
+
 /** Stage 3: narrow what is shown, preserving span boundaries and counters. */
 export function projectSpans(
   spans: TranscriptSpan[],
@@ -118,13 +168,17 @@ export function projectSpans(
   const query = searchQuery.trim().toLowerCase()
   const isRoleFilter = ROLE_FILTERS.has(messageFilter)
   const isToolFilter = messageFilter !== 'all' && !isRoleFilter
+  const steers = messageFilter === 'events-only' ? steerSpanIds(spans) : null
 
   const projected: ProjectedSpan[] = []
 
   for (const span of spans) {
-    if (isRoleFilter && !matchesRoleFilter(span, messageFilter)) continue
+    if (isRoleFilter && !matchesRoleFilter(span, messageFilter) && !steers?.has(span.id)) continue
 
     let visibleCallIds: string[] | null = null
+    if (messageFilter === 'errors-only' && span.kind === 'tools') {
+      visibleCallIds = span.calls.filter(call => call.isError).map(call => call.id)
+    }
     if (isToolFilter) {
       if (span.kind !== 'tools') continue
       const matching = span.calls.filter(
