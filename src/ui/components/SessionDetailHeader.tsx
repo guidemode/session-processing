@@ -223,13 +223,12 @@ export function SessionDetailHeader({
                         live indicator, not as a warning. */}
                     <span
                       className="inline-flex items-center gap-1.5 text-sm text-base-content/60"
-                      title={
-                        `${session.transcriptParts} uploaded part` +
-                        `${session.transcriptParts === 1 ? '' : 's'}, already counted in the size ` +
-                        'shown, still stored separately from the base transcript. They merge on ' +
-                        'SessionEnd, at 1 MB unmerged, at the 50-part cap, or when the session ' +
-                        'is processed.'
-                      }
+                      title={[
+                        `${session.transcriptParts} uploaded part${session.transcriptParts === 1 ? '' : 's'},`,
+                        'already counted in the size shown, still stored separately from the base',
+                        'transcript. They merge on SessionEnd, at 1 MB unmerged, at the 50-part cap,',
+                        'or when the session is processed.',
+                      ].join(' ')}
                     >
                       <span className="relative flex h-1.5 w-1.5">
                         <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-info opacity-60" />
