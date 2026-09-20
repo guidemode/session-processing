@@ -13,7 +13,17 @@ interface TranscriptHeaderProps {
   summary: TranscriptSummary
   /** Peak cached context in tokens, or null when the session reports none. */
   peakContextTokens: number | null
-  contextWindow: number
+  /**
+   * The model's real window, or `null` when nobody has established it yet.
+   *
+   * NULL IS THE NORMAL STATE OF A SESSION THAT IS STILL RUNNING. The window is a
+   * per-model fact that only the server's pricing pass can look up
+   * (`token_prices.max_input_tokens`), so until a session is processed there is
+   * no answer — and Claude Code, unlike Codex, does not declare one in the
+   * transcript. Printing the 200k assumption regardless is how a 1m session came
+   * to render "382k / peak of 200k" in red.
+   */
+  contextWindow: number | null
   /** Context occupancy over the session, already downsampled. */
   contextSeries?: number[]
   /** Present only when a filter or search is narrowing the list. */
@@ -125,6 +135,19 @@ function contextTone(tokens: number, window: number): string {
   return 'text-error'
 }
 
+/**
+ * What to say under the peak.
+ *
+ * A window we do not have gets no sentence. Saying "peak of 200k" beside a
+ * measured 382k is not a rounding error — it is a claim the data on screen has
+ * already disproved, and it drags the red tone along with it.
+ */
+function contextHint(peakTokens: number | null, window: number | null): string {
+  if (window === null) return 'peak context'
+  if (peakTokens !== null && peakTokens > window) return 'peak · window unconfirmed'
+  return `peak of ${formatChars(window)}`
+}
+
 export function TranscriptHeader({
   summary,
   peakContextTokens,
@@ -190,9 +213,11 @@ export function TranscriptHeader({
         <Stat
           label="Context"
           value={peakContextTokens === null ? '—' : formatChars(peakContextTokens)}
-          hint={`peak of ${formatChars(contextWindow)}`}
+          hint={contextHint(peakContextTokens, contextWindow)}
           tone={
-            peakContextTokens === null ? undefined : contextTone(peakContextTokens, contextWindow)
+            peakContextTokens === null || contextWindow === null
+              ? undefined
+              : contextTone(peakContextTokens, contextWindow)
           }
           spark={contextSeries}
         />

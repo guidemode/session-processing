@@ -23,7 +23,8 @@ interface TranscriptListProps {
   totalSpans: number
   reverseOrder: boolean
   peakContextTokens: number | null
-  contextWindow: number
+  /** `null` until the server's pricing pass establishes the model's real window. */
+  contextWindow: number | null
   /** Context occupancy over the session, for the header sparkline. */
   contextSeries?: number[]
   /** The filter in force, and how to change it, for the clickable counters. */
