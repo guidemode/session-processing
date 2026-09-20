@@ -491,6 +491,51 @@ describe('CanonicalParser', () => {
     })
   })
 
+  describe('images', () => {
+    // A pasted screenshot arrives as a second block beside text that says only
+    // `[Image #12]`. It used to be dropped, leaving the placeholder pointing at
+    // nothing.
+    const imageLine = (text?: string) =>
+      JSON.stringify({
+        uuid: 'img-1',
+        sessionId: 'session-1',
+        type: 'user',
+        provider: 'claude-code',
+        timestamp: '2025-10-01T00:00:00Z',
+        message: {
+          role: 'user',
+          content: [
+            ...(text ? [{ type: 'text', text }] : []),
+            {
+              type: 'image',
+              source: { type: 'base64', media_type: 'image/png', data: 'iVBORw0KGgo=' },
+            },
+          ],
+        },
+      })
+
+    it('carries a pasted image alongside the text that refers to it', () => {
+      const { messages } = parser.parseSession(imageLine('See [Image #12]'))
+
+      expect(messages).toHaveLength(1)
+      const content = messages[0].content as { text?: string; images?: unknown[] }
+      expect(content.text).toBe('See [Image #12]')
+      expect(content.images).toEqual([
+        {
+          type: 'image',
+          source: { type: 'base64', media_type: 'image/png', data: 'iVBORw0KGgo=' },
+        },
+      ])
+    })
+
+    it('keeps an image that arrives with no text of its own', () => {
+      const { messages } = parser.parseSession(imageLine())
+
+      expect(messages).toHaveLength(1)
+      expect((messages[0].content as { images?: unknown[] }).images).toHaveLength(1)
+    })
+  })
+
   describe('extractSessionId', () => {
     it('should extract sessionId from canonical message', () => {
       const rawMessage = {

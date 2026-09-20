@@ -557,13 +557,36 @@ export abstract class BaseMessageProcessor {
       // If text is empty but we have structured content, it means the content
       // is in the parts array (which should have been handled above)
       // Don't show as JSON if text is empty string but structured exists
-      if (!message.content.text && !message.content.structured) {
+      if (!message.content.text && !message.content.structured && !message.content.images) {
         blocks.push(createContentBlock('json', message.content, { collapsed: true }))
       }
     } else {
       blocks.push(createContentBlock('json', message.content, { collapsed: true }))
     }
 
+    // Images the parser carried alongside the text, AFTER it: the text is the
+    // sentence, the image is what it points at.
+    for (const block of this.extractImageBlocks(message)) {
+      blocks.push(block)
+    }
+
+    return blocks
+  }
+
+  /**
+   * Image blocks from `StructuredMessageContent.images`, ready to render.
+   */
+  protected extractImageBlocks(message: BaseSessionMessage): ContentBlock[] {
+    const images = message.content?.images
+    if (!Array.isArray(images)) return []
+
+    const blocks: ContentBlock[] = []
+    for (const image of images) {
+      const imageData = this.extractImageFromPart(image)
+      if (imageData) {
+        blocks.push(createContentBlock('image', imageData.data, { format: imageData.type }))
+      }
+    }
     return blocks
   }
 

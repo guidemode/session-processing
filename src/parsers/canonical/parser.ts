@@ -159,6 +159,15 @@ export class CanonicalParser extends BaseParser {
     const toolUseBlock = blocks.find(b => b.type === 'tool_use')
     const toolResultBlock = blocks.find(b => b.type === 'tool_result')
 
+    // A pasted screenshot arrives as a SECOND block on the user's line, beside
+    // text that says only `[Image #12]`. Dropping it here — which is what
+    // happened until this line existed — leaves the placeholder pointing at
+    // nothing, and the UI's image support unreachable for every provider.
+    const imageBlocks = blocks.filter(
+      (b): b is Extract<CanonicalContentBlock, { type: 'image' }> => b.type === 'image'
+    )
+    const images = imageBlocks.length > 0 ? imageBlocks.map(b => ({ ...b })) : undefined
+
     // Combine all text/thinking content
     const textParts = textBlocks.map(block =>
       block.type === 'text' ? block.text : block.thinking || ''
@@ -206,6 +215,7 @@ export class CanonicalParser extends BaseParser {
       const textContent: StructuredMessageContent = {
         type: 'structured',
         text: combinedText,
+        images,
       }
 
       const textMessage: ParsedMessage = {
@@ -319,17 +329,19 @@ export class CanonicalParser extends BaseParser {
       return messages // Return tool result (and text if present)
     }
 
-    // Text-only message (no tool blocks)
-    if (combinedText) {
+    // Text-only message (no tool blocks), or an image on its own: a paste with
+    // no sentence around it is still something the user said.
+    if (combinedText || images) {
       const textContent: StructuredMessageContent = {
         type: 'structured',
         text: combinedText,
+        images,
       }
 
       const textMessage: ParsedMessage = {
         id: canonical.uuid,
         timestamp,
-        type: this.determineMessageType(canonical, combinedText),
+        type: this.determineMessageType(canonical, combinedText ?? ''),
         content: textContent,
         metadata: {
           role: canonical.message.role,

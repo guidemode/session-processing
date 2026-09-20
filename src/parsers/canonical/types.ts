@@ -45,6 +45,14 @@ export type CanonicalContentBlock =
       content: string
       is_error?: boolean
     }
+  | {
+      type: 'image'
+      source: {
+        type: 'base64'
+        media_type: string
+        data: string
+      }
+    }
 
 /**
  * Content can be either plain text or structured blocks
