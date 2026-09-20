@@ -29,6 +29,18 @@ export interface SessionDetailHeaderProps {
     gitBranch?: string
     firstCommitHash?: string
     latestCommitHash?: string
+    /**
+     * Append parts sitting on top of the stored transcript, if any.
+     *
+     * Non-zero means the session is still being written to: the CLI is sending
+     * deltas and the server has not merged them yet. It goes to zero on
+     * compaction, which happens at `SessionEnd`, at the part cap, or when the
+     * session is processed — so a number here is a live session, and a number
+     * that STAYS here on a finished session is worth investigating.
+     */
+    transcriptParts?: number
+    /** Canonical bytes held in those parts — how much is not yet merged. */
+    transcriptPartBytes?: number
   }
 
   // Optional stats
@@ -132,131 +144,174 @@ export function SessionDetailHeader({
         {/* Header with user info, project, time, stats, and actions */}
         <div>
           <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-2">
-            {/* Left: Provider Icon + User/Project Info + Inline Stats */}
-            <div className="flex items-center gap-2 flex-wrap flex-1 min-w-0">
-              {/* Provider Icon */}
-              <ProviderIcon providerId={session.provider} size={20} />
+            {/* Left: identity on one line, stats on the next.
+                They used to share a single wrapping row, which put the stats
+                mid-air beside any org/repo long enough to wrap — and most are. */}
+            <div className="flex flex-col gap-1 flex-1 min-w-0">
+              <div className="flex items-center gap-2 min-w-0">
+                {/* Provider Icon */}
+                <ProviderIcon providerId={session.provider} size={20} />
 
-              {session.username && session.userAvatarUrl && (
-                <>
-                  <a
-                    href={`https://github.com/${session.username}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-2 hover:opacity-80 transition-opacity"
-                    title={`View @${session.username} on GitHub`}
-                  >
-                    <img
-                      src={session.userAvatarUrl}
-                      alt={session.username}
-                      className="w-8 h-8 rounded-full flex-shrink-0"
-                    />
-                    <span className="font-semibold text-lg md:text-xl hover:underline">
-                      @{session.username}
-                    </span>
-                  </a>
-                  <span className="text-base-content/50 text-sm">•</span>
-                </>
-              )}
-              {onRepositoryClick ? (
-                <button
-                  type="button"
-                  onClick={onRepositoryClick}
-                  className="font-medium text-base md:text-lg hover:text-primary hover:underline transition-colors cursor-pointer"
-                >
-                  {session.repositoryName}
-                </button>
-              ) : (
-                <span className="font-medium text-base md:text-lg">{session.repositoryName}</span>
-              )}
-              <span className="text-base-content/50 text-sm">•</span>
-              <span className="text-sm text-base-content/70">
-                {formatDate(session.sessionStartTime)}
-              </span>
-
-              {/* Inline Stats */}
-              <span className="text-base-content/50 text-sm">•</span>
-              <span className="text-sm font-medium">{session.provider}</span>
-              <span className="text-base-content/50 text-sm">•</span>
-              <span className="text-sm">{formatDuration(session.durationMs)}</span>
-              {messageCount !== undefined && (
-                <>
-                  <span className="text-base-content/50 text-sm">•</span>
-                  <span className="text-sm">{messageCount} msg</span>
-                </>
-              )}
-              <span className="text-base-content/50 text-sm">•</span>
-              <span className="text-sm">
-                {session.fileSize !== undefined && session.fileSize !== null ? (
-                  formatFileSize(session.fileSize)
-                ) : (
-                  <span className="badge badge-ghost badge-sm">Metrics Only</span>
+                {session.username && session.userAvatarUrl && (
+                  <>
+                    <a
+                      href={`https://github.com/${session.username}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-2 hover:opacity-80 transition-opacity min-w-0"
+                      title={`View @${session.username} on GitHub`}
+                    >
+                      <img
+                        src={session.userAvatarUrl}
+                        alt={session.username}
+                        className="w-8 h-8 rounded-full flex-shrink-0"
+                      />
+                      <span className="font-semibold text-lg md:text-xl hover:underline">
+                        @{session.username}
+                      </span>
+                    </a>
+                    <span className="text-base-content/50 text-sm flex-shrink-0">•</span>
+                  </>
                 )}
-              </span>
+                {onRepositoryClick ? (
+                  <button
+                    type="button"
+                    onClick={onRepositoryClick}
+                    className="font-medium text-base md:text-lg hover:text-primary hover:underline transition-colors cursor-pointer truncate"
+                    title={session.repositoryName}
+                  >
+                    {session.repositoryName}
+                  </button>
+                ) : (
+                  <span
+                    className="font-medium text-base md:text-lg truncate"
+                    title={session.repositoryName}
+                  >
+                    {session.repositoryName}
+                  </span>
+                )}
+              </div>
 
-              {/* Sync Status Icon (retired desktop app only) */}
-              {syncStatus && (
-                <>
-                  <span className="text-base-content/50 text-sm">•</span>
-                  {syncStatus.failed ? (
-                    <div
-                      className="tooltip tooltip-bottom cursor-pointer hover:scale-110 transition-transform"
-                      data-tip="Sync failed - Click to view error"
-                      onClick={() => syncStatus.onShowError?.(syncStatus.reason || 'Unknown error')}
-                    >
-                      <svg
-                        className="w-4 h-4 text-error"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
-                        />
-                      </svg>
-                    </div>
-                  ) : syncStatus.synced ? (
-                    <div className="tooltip tooltip-bottom" data-tip="Synced to server">
-                      <svg
-                        className="w-4 h-4 text-success"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M5 13l4 4L19 7"
-                        />
-                      </svg>
-                    </div>
+              {/* Stats, on their own line so a long org/repo cannot displace them */}
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-sm text-base-content/70">
+                  {formatDate(session.sessionStartTime)}
+                </span>
+                <span className="text-base-content/50 text-sm">•</span>
+                <span className="text-sm font-medium">{session.provider}</span>
+                <span className="text-base-content/50 text-sm">•</span>
+                <span className="text-sm">{formatDuration(session.durationMs)}</span>
+                {messageCount !== undefined && (
+                  <>
+                    <span className="text-base-content/50 text-sm">•</span>
+                    <span className="text-sm">{messageCount} msg</span>
+                  </>
+                )}
+                <span className="text-base-content/50 text-sm">•</span>
+                <span className="text-sm">
+                  {session.fileSize !== undefined && session.fileSize !== null ? (
+                    formatFileSize(session.fileSize)
                   ) : (
-                    <div
-                      className="tooltip tooltip-bottom cursor-pointer hover:scale-110 transition-transform"
-                      data-tip="Click to sync to server"
-                      onClick={syncStatus.onSync}
-                    >
-                      <svg
-                        className="w-4 h-4 text-base-content/30"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
-                        />
-                      </svg>
-                    </div>
+                    <span className="badge badge-ghost badge-sm">Metrics Only</span>
                   )}
-                </>
-              )}
+                </span>
+                {session.transcriptParts !== undefined && session.transcriptParts > 0 && (
+                  <>
+                    <span className="text-base-content/50 text-sm">•</span>
+                    {/* Deliberately quiet. This is the NORMAL state of a session
+                        that is still being written to, so it should read as a
+                        live indicator, not as a warning. */}
+                    <span
+                      className="inline-flex items-center gap-1.5 text-sm text-base-content/60"
+                      title={
+                        `${session.transcriptParts} uploaded part` +
+                        `${session.transcriptParts === 1 ? '' : 's'}, already counted in the size ` +
+                        'shown, still stored separately from the base transcript. They merge on ' +
+                        'SessionEnd, at 1 MB unmerged, at the 50-part cap, or when the session ' +
+                        'is processed.'
+                      }
+                    >
+                      <span className="relative flex h-1.5 w-1.5">
+                        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-info opacity-60" />
+                        <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-info" />
+                      </span>
+                      {session.transcriptParts} part{session.transcriptParts === 1 ? '' : 's'}
+                      {/* "unmerged", because these bytes are PART OF the size
+                          shown to the left, not additional to it. Without the
+                          word, "3.6 MB · 6 parts · 827 KB" reads as a sum. */}
+                      {session.transcriptPartBytes !== undefined &&
+                        session.transcriptPartBytes > 0 &&
+                        ` · ${formatFileSize(session.transcriptPartBytes)} unmerged`}
+                    </span>
+                  </>
+                )}
+
+                {/* Sync Status Icon (retired desktop app only) */}
+                {syncStatus && (
+                  <>
+                    <span className="text-base-content/50 text-sm">•</span>
+                    {syncStatus.failed ? (
+                      <div
+                        className="tooltip tooltip-bottom cursor-pointer hover:scale-110 transition-transform"
+                        data-tip="Sync failed - Click to view error"
+                        onClick={() =>
+                          syncStatus.onShowError?.(syncStatus.reason || 'Unknown error')
+                        }
+                      >
+                        <svg
+                          className="w-4 h-4 text-error"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+                          />
+                        </svg>
+                      </div>
+                    ) : syncStatus.synced ? (
+                      <div className="tooltip tooltip-bottom" data-tip="Synced to server">
+                        <svg
+                          className="w-4 h-4 text-success"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M5 13l4 4L19 7"
+                          />
+                        </svg>
+                      </div>
+                    ) : (
+                      <div
+                        className="tooltip tooltip-bottom cursor-pointer hover:scale-110 transition-transform"
+                        data-tip="Click to sync to server"
+                        onClick={syncStatus.onSync}
+                      >
+                        <svg
+                          className="w-4 h-4 text-base-content/30"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
+                          />
+                        </svg>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
             </div>
 
             {/* Right: Action Buttons (retired desktop app only) */}
