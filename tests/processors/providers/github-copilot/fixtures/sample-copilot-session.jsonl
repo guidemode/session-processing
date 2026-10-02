@@ -1,8 +1,0 @@
-{"id":"msg-001","timestamp":"2025-01-01T00:00:00.000Z","type":"user","text":"Can you help me write a function to parse JSON?"}
-{"id":"msg-002","timestamp":"2025-01-01T00:00:01.500Z","type":"copilot","text":"I'd be happy to help you write a JSON parsing function. Let me create that for you."}
-{"id":"tool-001-result","timestamp":"2025-01-01T00:00:02.000Z","type":"tool_call_completed","callId":"tool-001","name":"write_file","toolTitle":"Write File","arguments":{"filePath":"/test/parser.js","content":"function parseJSON(str) {\n  return JSON.parse(str);\n}"},"result":{"type":"success","log":"File written successfully"}}
-{"id":"msg-003","timestamp":"2025-01-01T00:00:03.000Z","type":"copilot","text":"I've created a simple JSON parsing function for you."}
-{"id":"msg-004","timestamp":"2025-01-01T00:00:05.000Z","type":"user","text":"Can you add error handling?"}
-{"id":"tool-002-result","timestamp":"2025-01-01T00:00:06.000Z","type":"tool_call_completed","callId":"tool-002","name":"edit_file","toolTitle":"Edit File","arguments":{"filePath":"/test/parser.js","oldContent":"function parseJSON(str) {\n  return JSON.parse(str);\n}","newContent":"function parseJSON(str) {\n  try {\n    return JSON.parse(str);\n  } catch (error) {\n    console.error('Failed to parse JSON:', error);\n    return null;\n  }\n}"},"result":{"type":"success","log":"File edited successfully"}}
-{"id":"msg-005","timestamp":"2025-01-01T00:00:07.000Z","type":"copilot","text":"I've added error handling to the function. It now catches parsing errors and returns null instead of throwing."}
-{"id":"msg-006","timestamp":"2025-01-01T00:00:10.000Z","type":"user","text":"Perfect, thanks!"}

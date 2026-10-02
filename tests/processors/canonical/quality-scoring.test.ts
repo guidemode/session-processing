@@ -123,6 +123,33 @@ describe('tool capability mapping', () => {
       expect(getToolCapability(name)).not.toBeNull()
     })
 
+    // Every tool name Copilot CLI is known to emit. The CLI passes them through raw, so a
+    // name that misses here silently drops out of read-before-write and verification.
+    it.each([
+      ['view', 'read'],
+      ['rg', 'read'],
+      ['grep', 'read'],
+      ['glob', 'read'],
+      ['apply_patch', 'write'],
+      ['edit', 'write'],
+      ['create', 'write'],
+      ['str_replace_editor', 'write'],
+      ['bash', 'execute'],
+      ['read_bash', 'execute'],
+      ['write_bash', 'execute'],
+      ['stop_bash', null],
+      ['list_bash', null],
+      ['task', null],
+      ['web_fetch', null],
+      ['report_intent', null],
+      ['ask_user', null],
+      ['fetch_copilot_cli_documentation', null],
+      ['skill', null],
+      ['sql', null],
+    ])('maps the Copilot CLI tool %s to %s', (name, capability) => {
+      expect(getToolCapability(name)).toBe(capability)
+    })
+
     it('returns null for tools with no process-quality meaning', () => {
       expect(getToolCapability('WebFetch')).toBeNull()
       expect(getToolCapability('take_screenshot')).toBeNull()

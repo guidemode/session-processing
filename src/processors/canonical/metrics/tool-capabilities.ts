@@ -38,6 +38,10 @@ const EXACT: Record<string, ToolCapability> = {
   codebasesearch: 'read',
   filesearch: 'read',
   notebookread: 'read',
+  // Copilot CLI. `view` reads a file or lists a directory; `rg` is its ripgrep. Neither
+  // contains a verb the substring rules know, so both used to classify as nothing.
+  view: 'read',
+  rg: 'read',
 
   // --- write / modify ---
   write: 'write',
@@ -98,6 +102,17 @@ const EXACT: Record<string, ToolCapability> = {
  * Deliberately ordered: a name containing both "plan" and "write" should count as
  * planning, and "todo" beats the generic read/write verbs.
  */
+/**
+ * Names that a substring rule would misclassify, and which mean nothing for process quality.
+ *
+ * Copilot CLI's background-shell controls contain "bash", so the substring rules counted
+ * them as execution - and execution after a write is what earns the verification points.
+ * Stopping a shell or listing the running ones verifies nothing. `read_bash` and
+ * `write_bash` are deliberately NOT here: polling a running command's output or feeding it
+ * input is part of running it, as Claude Code's `BashOutput` is.
+ */
+const NO_CAPABILITY = new Set(['stopbash', 'listbash'])
+
 const SUBSTRING_RULES: Array<[string, ToolCapability]> = [
   ['exitplan', 'plan'],
   ['todo', 'todo'],
@@ -126,6 +141,7 @@ export function getToolCapability(name: string): ToolCapability | null {
   const normalized = normalizeToolName(name)
   const exact = EXACT[normalized]
   if (exact) return exact
+  if (NO_CAPABILITY.has(normalized)) return null
 
   for (const [needle, capability] of SUBSTRING_RULES) {
     if (normalized.includes(needle)) return capability

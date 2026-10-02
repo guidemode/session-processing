@@ -1,15 +1,55 @@
 /**
  * Unified Context Metrics Processor
  *
- * Works for providers with token data (Claude Code, Codex).
+ * Works for providers with token data (Claude Code, Codex, Copilot CLI).
  * Tracks token usage, cache efficiency, and context compaction events.
  * Returns null for providers without token data.
  */
 
 import type { ContextManagementMetrics } from '@guidemode/types'
-import type { ParsedSession } from '../../../parsers/base/types.js'
+import type { ParsedMessage, ParsedSession } from '../../../parsers/base/types.js'
 import { BaseMetricProcessor } from '../../base/metric-processor.js'
-import { attributeTokens, requestKey } from './token-attribution.js'
+import { attributeTokens, isSessionAggregateUsage, requestKey } from './token-attribution.js'
+
+/**
+ * A context size the provider stated outright, as `providerMetadata.context_tokens`.
+ *
+ * Copilot CLI states no per-request usage, so there is no request to read a window from; it
+ * does record the whole prompt of each turn's last request, and its context as the session
+ * closed, and the CLI converter writes those as readings carrying no usage at all.
+ */
+function statedContextTokens(message: ParsedMessage): number | null {
+  const providerMetadata = message.metadata?.providerMetadata as Record<string, unknown> | undefined
+  const tokens = providerMetadata?.context_tokens
+  return typeof tokens === 'number' && tokens > 0 ? tokens : null
+}
+
+/**
+ * How full the window was at this message, or null if it does not say.
+ *
+ * A stated reading is taken as given. Otherwise one request's usage is: its uncached input
+ * plus what it read from and wrote to the cache is the whole prompt. A session aggregate is
+ * not a reading at all — it is a session's spend, and presented as one window it reported
+ * utilisation in the thousands of percent.
+ */
+function contextReadingOf(message: ParsedMessage): number | null {
+  const stated = statedContextTokens(message)
+  if (stated !== null) return stated
+
+  const usage = message.metadata?.usage as
+    | {
+        input_tokens?: number
+        cache_creation_input_tokens?: number
+        cache_read_input_tokens?: number
+      }
+    | undefined
+  if (!usage || isSessionAggregateUsage(message)) return null
+  return (
+    (usage.input_tokens || 0) +
+    (usage.cache_read_input_tokens || 0) +
+    (usage.cache_creation_input_tokens || 0)
+  )
+}
 
 export class CanonicalContextProcessor extends BaseMetricProcessor {
   readonly name = 'canonical-context'
@@ -54,7 +94,7 @@ export class CanonicalContextProcessor extends BaseMetricProcessor {
    * Check if session has token data (required for context metrics)
    */
   canProcess(session: ParsedSession): boolean {
-    return session.messages.some(m => m.metadata?.usage)
+    return session.messages.some(m => m.metadata?.usage || statedContextTokens(m) !== null)
   }
 
   async process(session: ParsedSession): Promise<ContextManagementMetrics> {
@@ -101,45 +141,18 @@ export class CanonicalContextProcessor extends BaseMetricProcessor {
 
     let contextLength = 0
     let mostRecentTimestamp: Date | null = null
-    let mostRecentUsage: {
-      input_tokens?: number
-      output_tokens?: number
-      cache_creation_input_tokens?: number
-      cache_read_input_tokens?: number
-    } | null = null
 
     for (const message of session.messages) {
-      const usage = message.metadata?.usage as
-        | {
-            input_tokens?: number
-            output_tokens?: number
-            cache_creation_input_tokens?: number
-            cache_read_input_tokens?: number
-          }
-        | undefined
+      // Track the most recent main chain reading for context_length. This deliberately
+      // stays per-message: context length is a point-in-time reading of the newest
+      // message's window, not a sum, so request de-duplication does not apply.
+      if (message.metadata?.isSidechain === true || !message.timestamp) continue
+      if (mostRecentTimestamp && message.timestamp <= mostRecentTimestamp) continue
 
-      if (usage) {
-        // Track most recent main chain message for context_length. This deliberately
-        // stays per-message: context length is a point-in-time reading of the newest
-        // message's window, not a sum, so request de-duplication does not apply.
-        const isSidechain = message.metadata?.isSidechain === true
-        if (
-          !isSidechain &&
-          message.timestamp &&
-          (!mostRecentTimestamp || message.timestamp > mostRecentTimestamp)
-        ) {
-          mostRecentTimestamp = message.timestamp
-          mostRecentUsage = usage
-        }
-      }
-    }
-
-    // Calculate context_length from most recent main chain message
-    if (mostRecentUsage) {
-      contextLength =
-        (mostRecentUsage.input_tokens || 0) +
-        (mostRecentUsage.cache_read_input_tokens || 0) +
-        (mostRecentUsage.cache_creation_input_tokens || 0)
+      const reading = contextReadingOf(message)
+      if (reading === null) continue
+      mostRecentTimestamp = message.timestamp
+      contextLength = reading
     }
 
     return {
@@ -211,7 +224,9 @@ export class CanonicalContextProcessor extends BaseMetricProcessor {
           }
         | undefined
 
-      if (!usage) continue
+      // Not one request, so not one turn: averaging it in would report a session's spend
+      // as a turn's.
+      if (!usage || isSessionAggregateUsage(message)) continue
 
       const key = requestKey(message)
       if (seenRequests.has(key)) continue

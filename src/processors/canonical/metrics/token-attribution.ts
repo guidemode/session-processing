@@ -138,6 +138,22 @@ export function requestKey(message: ParsedMessage): string {
   return typeof requestId === 'string' && requestId.length > 0 ? requestId : message.id
 }
 
+/**
+ * Whether a message's usage block is a session aggregate rather than one API request.
+ *
+ * Copilot CLI writes no per-request usage. Its tokens arrive on `session.shutdown`, which
+ * the CLI converts into one meta message per model carrying what that model spent since the
+ * previous shutdown. Those messages are each counted once here, which is right for totals
+ * and per-model attribution. They are NOT a reading of the context window, nor one turn:
+ * taken as either, a single message holding a whole session's spend reported context
+ * utilisation in the thousands of percent. The context processor skips them for exactly
+ * those two figures.
+ */
+export function isSessionAggregateUsage(message: ParsedMessage): boolean {
+  const providerMetadata = message.metadata?.providerMetadata as Record<string, unknown> | undefined
+  return providerMetadata?.copilot_type === 'session.shutdown'
+}
+
 function reasoningTokensOf(usage: RawUsage): number {
   return usage.output_tokens_details?.reasoning_tokens ?? usage.reasoning_output_tokens ?? 0
 }

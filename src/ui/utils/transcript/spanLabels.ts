@@ -67,7 +67,15 @@ export function describeToolCall(toolName: string, input: Record<string, unknown
     return truncateLabel(stringInput(input, 'command') ?? '')
   }
 
-  if (name === 'read' || name === 'edit' || name === 'write' || name === 'multiedit') {
+  // `view` and `create` are Copilot CLI's read and new-file tools.
+  if (
+    name === 'read' ||
+    name === 'edit' ||
+    name === 'write' ||
+    name === 'multiedit' ||
+    name === 'view' ||
+    name === 'create'
+  ) {
     return truncateLabel(stringInput(input, 'file_path', 'filePath', 'path') ?? '')
   }
 
@@ -82,7 +90,7 @@ export function describeToolCall(toolName: string, input: Record<string, unknown
     return truncateLabel(path || command)
   }
 
-  if (name === 'grep' || name === 'glob') {
+  if (name === 'grep' || name === 'glob' || name === 'rg') {
     const pattern = stringInput(input, 'pattern') ?? ''
     const path = stringInput(input, 'path', 'glob')
     return truncateLabel(path ? `${pattern} in ${path}` : pattern)
@@ -92,7 +100,7 @@ export function describeToolCall(toolName: string, input: Record<string, unknown
     return truncateLabel(stringInput(input, 'description', 'prompt') ?? '')
   }
 
-  if (name === 'webfetch' || name === 'websearch') {
+  if (name === 'webfetch' || name === 'websearch' || name === 'web_fetch') {
     return truncateLabel(stringInput(input, 'url', 'query', 'prompt') ?? '')
   }
 
@@ -138,8 +146,16 @@ function commonDirectory(paths: string[]): string {
   return shared.join('/')
 }
 
-const EDIT_TOOLS = new Set(['edit', 'write', 'multiedit', 'notebookedit', 'str_replace_editor'])
-const EXPLORE_TOOLS = new Set(['read', 'grep', 'glob'])
+const EDIT_TOOLS = new Set([
+  'edit',
+  'write',
+  'multiedit',
+  'notebookedit',
+  'str_replace_editor',
+  'create',
+  'apply_patch',
+])
+const EXPLORE_TOOLS = new Set(['read', 'grep', 'glob', 'view', 'rg'])
 const AGENT_TOOLS = new Set(['task', 'agent'])
 
 function matches(calls: ToolCall[], names: Set<string>): number {

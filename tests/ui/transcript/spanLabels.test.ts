@@ -29,6 +29,13 @@ describe('describeToolCall', () => {
     expect(describeToolCall('NotebookEdit', { notebook_path: '/n.ipynb' })).toBe('/n.ipynb')
   })
 
+  it('describes Copilot CLI tools, which arrive under their own names', () => {
+    expect(describeToolCall('view', { path: '/a/b/c.ts' })).toBe('/a/b/c.ts')
+    expect(describeToolCall('create', { path: '/a/new.ts', file_text: 'x' })).toBe('/a/new.ts')
+    expect(describeToolCall('rg', { pattern: 'foo', path: 'src' })).toBe('foo in src')
+    expect(describeToolCall('web_fetch', { url: 'https://x.dev' })).toBe('https://x.dev')
+  })
+
   it('summarises TodoWrite by progress', () => {
     expect(
       describeToolCall('TodoWrite', {
@@ -93,6 +100,23 @@ describe('deriveToolSpanLabel', () => {
         ['Glob', { pattern: '*.ts' }],
       ]).label
     ).toBe('Explored 3 locations')
+  })
+
+  it('gives Copilot CLI tools the same verbs', () => {
+    expect(
+      spanFor([
+        ['view', { path: '/a.ts' }],
+        ['rg', { pattern: 'x' }],
+        ['glob', { pattern: '*.ts' }],
+      ]).label
+    ).toBe('Explored 3 locations')
+    expect(
+      spanFor([
+        ['apply_patch', { input: '*** Begin Patch' }],
+        ['create', { path: '/b.ts' }],
+        ['bash', { command: 'npm test' }],
+      ]).label
+    ).toBe('Edited 2 files')
   })
 
   it('appends a failure count', () => {

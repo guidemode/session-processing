@@ -9,6 +9,7 @@ import type { ToolResultContent, ToolUseContent, UsageMetrics } from '@guidemode
 import { isStructuredMessageContent } from '@guidemode/types'
 import type { ParsedMessage, ParsedSession } from '../../../parsers/base/types.js'
 import { BaseMetricProcessor } from '../../base/metric-processor.js'
+import { getToolCapability, normalizeToolName } from './tool-capabilities.js'
 
 /**
  * Text the harness injects into user messages: command wrappers, system reminders,
@@ -23,6 +24,17 @@ const INJECTED_CONTENT =
   /<(system-reminder|local-command-caveat|local-command-stdout|task-notification|command-name|command-message|command-args)>[\s\S]*?<\/\1>/g
 import { isHumanPrompt } from './message-filters.js'
 
+/**
+ * Tools that poll a running command's output. They classify as execution, which is right
+ * for verification scoring, but the ratio has always counted Claude Code's `BashOutput` as a
+ * read; Copilot CLI's `read_bash` is the same operation and is counted the same way.
+ */
+const OUTPUT_POLL_TOOLS = new Set(['bashoutput', 'readbash'])
+
+function isReadForRatio(name: string): boolean {
+  return getToolCapability(name) === 'read' || OUTPUT_POLL_TOOLS.has(normalizeToolName(name))
+}
+
 export class CanonicalUsageProcessor extends BaseMetricProcessor {
   readonly name = 'canonical-usage'
   readonly metricType = 'usage' as const
@@ -36,12 +48,11 @@ export class CanonicalUsageProcessor extends BaseMetricProcessor {
     // flatter exactly the sessions that delegate most.
     const userMessages = session.messages.filter(isHumanPrompt)
 
-    // Calculate Read/Write ratio
-    const readTools = ['Read', 'Grep', 'Glob', 'BashOutput']
-    const writeTools = ['Write', 'Edit']
-
-    const readCount = toolUses.filter(tool => readTools.includes(tool.name)).length
-    const writeCount = toolUses.filter(tool => writeTools.includes(tool.name)).length
+    // Read/Write ratio, by what each tool does rather than what Claude Code calls it.
+    // The literal list (`Read`, `Grep`, `Glob`, `BashOutput` / `Write`, `Edit`) meant every
+    // other provider read 0 writes and reported its read count as the ratio.
+    const readCount = toolUses.filter(tool => isReadForRatio(tool.name)).length
+    const writeCount = toolUses.filter(tool => getToolCapability(tool.name) === 'write').length
 
     const readWriteRatio = writeCount > 0 ? Number((readCount / writeCount).toFixed(2)) : readCount
 
@@ -371,8 +382,10 @@ export class CanonicalUsageProcessor extends BaseMetricProcessor {
       const result = resultMap.get(tool.id)
       if (!result || !result.content) continue
 
-      // Count lines for read operations
-      if (tool.name === 'Read' || tool.name === 'Grep' || tool.name === 'Glob') {
+      // Count lines for read operations. Only the result's line count is used, which means
+      // the same thing whatever the provider: Claude's `Read`, Copilot's `view`, OpenCode's
+      // `read`. Reads done through a shell (`cat`, Codex's `rg`) are not visible here.
+      if (getToolCapability(tool.name) === 'read') {
         const content =
           typeof result.content === 'string' ? result.content : JSON.stringify(result.content)
         const lines = content.split('\n').filter(l => l.trim()).length

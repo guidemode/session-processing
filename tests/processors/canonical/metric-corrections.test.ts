@@ -268,6 +268,72 @@ describe('input clarity', () => {
   })
 })
 
+describe('read/write ratio', () => {
+  const ratio = async (calls: Array<[string, string?]>) => {
+    const lines = calls.flatMap(([name, result], i) => [
+      line({
+        type: 'assistant',
+        message: { role: 'assistant', content: [{ type: 'tool_use', id: `rw${i}`, name, input: {} }] },
+      }),
+      line({
+        type: 'user',
+        message: {
+          role: 'user',
+          content: [{ type: 'tool_result', tool_use_id: `rw${i}`, content: result ?? 'ok' }],
+        },
+      }),
+    ])
+    return (await new CanonicalUsageProcessor().process(parse(lines))) as UsageMetrics
+  }
+
+  it('gives a Claude Code session the same answer as the old literal tool list', async () => {
+    // The old list: Read, Grep, Glob, BashOutput are reads; Write, Edit are writes; and
+    // only Read, Grep and Glob contribute lines. Bash, TodoWrite, Task and WebFetch are
+    // neither.
+    const result = await ratio([
+      ['Read', 'a\nb\nc'],
+      ['Grep', 'x.ts:1:hit'],
+      ['Glob', 'x.ts\ny.ts'],
+      ['BashOutput', 'still running\nline'],
+      ['Bash'],
+      ['TodoWrite'],
+      ['Task'],
+      ['WebFetch'],
+      ['Write'],
+      ['Edit'],
+    ])
+
+    expect(result.metadata?.read_operations).toBe(4)
+    expect(result.metadata?.write_operations).toBe(2)
+    expect(result.read_write_ratio).toBe(2)
+    expect(result.metadata?.total_lines_read).toBe(6)
+  })
+
+  it('counts Codex writes, which used to make the ratio equal the read count', async () => {
+    const result = await ratio([['shell'], ['apply_patch'], ['apply_patch']])
+
+    expect(result.metadata?.write_operations).toBe(2)
+    expect(result.read_write_ratio).toBe(0)
+  })
+
+  it('counts Copilot CLI tools by what they do', async () => {
+    const result = await ratio([
+      ['view', '1. a\n2. b'],
+      ['rg', 'src/x.ts:1:hit'],
+      ['read_bash', 'output'],
+      ['stop_bash'],
+      ['str_replace_editor'],
+      ['create'],
+    ])
+
+    expect(result.metadata?.read_operations).toBe(3)
+    expect(result.metadata?.write_operations).toBe(2)
+    expect(result.read_write_ratio).toBe(1.5)
+    // view and rg; polled shell output is not a file read.
+    expect(result.metadata?.total_lines_read).toBe(3)
+  })
+})
+
 describe('task tracking', () => {
   const quality = (lines: string[]) =>
     new CanonicalQualityProcessor().process(parse(lines)) as Promise<QualityMetrics>

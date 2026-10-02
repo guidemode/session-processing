@@ -154,11 +154,15 @@ export const ERROR_EVENTS = new Set<EventKind>(['interruption'])
 
 const TOOL_ICONS: Array<[RegExp, Icon]> = [
   [/^(bash|shell)$/i, CommandLineIcon],
-  [/^(read|notebookread)$/i, EyeIcon],
-  [/^(edit|write|multiedit|notebookedit|str_replace_editor)$/i, PencilSquareIcon],
-  [/^(grep|glob)$/i, MagnifyingGlassIcon],
+  [/^(read|notebookread|view)$/i, EyeIcon],
+  [
+    /^(edit|write|multiedit|notebookedit|str_replace_editor|create|apply_patch)$/i,
+    PencilSquareIcon,
+  ],
+  [/^(grep|glob|rg)$/i, MagnifyingGlassIcon],
   [/^(task|agent)$/i, RectangleStackIcon],
-  [/^(webfetch|websearch)$/i, GlobeAltIcon],
+  [/^(webfetch|websearch|web_fetch)$/i, GlobeAltIcon],
+  [/^ask_user$/i, ChatBubbleLeftRightIcon],
   [/^todowrite$/i, ListBulletIcon],
   [/^exitplanmode$/i, MapIcon],
   [/^askuserquestion$/i, ChatBubbleLeftRightIcon],
